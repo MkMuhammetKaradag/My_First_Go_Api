@@ -1,30 +1,28 @@
 package routes
 
 import (
-	"github.com/MKMuhammetKaradag/go-microservice/auth-service/pkg/auth"
+	"github.com/MKMuhammetKaradag/go-microservice/auth-service/pkg/controllers"
 	authMiddleware "github.com/MKMuhammetKaradag/go-microservice/shared/middlewares"
 	"github.com/go-chi/chi/v5"
 )
 
-func CreateServer() *chi.Mux{
+func CreateServer() *chi.Mux {
+	authController := controllers.NewAuthController()
 	r := chi.NewRouter()
 	// r.Use(authMiddleware.AuthMiddleware)
-	r.Post("/register", auth.Register)
-	r.Post("/login", auth.Login)
+	r.Post("/signUp", authController.SignUp)
+	r.Post("/activationUser", authController.ActivationUser)
+	r.Post("/login", controllers.Login)
 	// r.Post("/logout", auth.Logout)
-	
 
 	protectedRouter := chi.NewRouter()
-    protectedRouter.Use(authMiddleware.AuthMiddleware)
-    protectedRouter.Post("/logout", auth.Logout)
-    protectedRouter.Get("/protected", auth.Protected)
-    
-    r.Mount("/", protectedRouter)
+	protectedRouter.Use(authMiddleware.AuthMiddleware)
+	protectedRouter.Post("/logout", controllers.Logout)
+	protectedRouter.Get("/protected", controllers.Protected)
+
+	r.Mount("/", protectedRouter)
 	return r
 }
-
-
-
 
 // func Login(c *gin.Context) {
 // 	var input models.User
@@ -55,7 +53,6 @@ func CreateServer() *chi.Mux{
 // 	sessionKey := "session:" + user.ID
 // 	fmt.Println(sessionKey)
 
-
 // 	userData := map[string]string{
 // 		"email":   user.Email,
 // 		"username": user.Username,
@@ -78,7 +75,7 @@ func CreateServer() *chi.Mux{
 
 // func Logout(c *gin.Context) {
 // 	tokenString, err := c.Cookie("session_id")
-	
+
 // 	if err != nil {
 // 		// Return unauthorized if no session token exists
 // 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Giriş yapılmamış"})
@@ -93,7 +90,6 @@ func CreateServer() *chi.Mux{
 // 		return
 // 	}
 // 	c.SetCookie("session_id", "", -1, "/", "", false, true)
-
 
 // 	c.JSON(http.StatusOK, gin.H{"message": "Başarıyla çıkış yapıldı"})
 // }
