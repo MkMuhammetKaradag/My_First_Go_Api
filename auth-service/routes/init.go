@@ -2,17 +2,18 @@ package routes
 
 import (
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/pkg/controllers"
+	"github.com/MKMuhammetKaradag/go-microservice/shared/messaging"
 	authMiddleware "github.com/MKMuhammetKaradag/go-microservice/shared/middlewares"
 	"github.com/go-chi/chi/v5"
 )
 
-func CreateServer() *chi.Mux {
-	authController := controllers.NewAuthController()
+func CreateServer(rabbitMQ *messaging.RabbitMQ) *chi.Mux {
+	authController := controllers.NewAuthController(rabbitMQ)
 	r := chi.NewRouter()
 	// r.Use(authMiddleware.AuthMiddleware)
 	r.Post("/signUp", authController.SignUp)
 	r.Post("/activationUser", authController.ActivationUser)
-	r.Post("/login", controllers.Login)
+	r.Post("/login", authController.SignIn)
 	// r.Post("/logout", auth.Logout)
 
 	protectedRouter := chi.NewRouter()

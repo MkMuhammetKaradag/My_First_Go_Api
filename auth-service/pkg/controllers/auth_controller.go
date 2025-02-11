@@ -2,30 +2,32 @@ package controllers
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
-	"time"
 
-	"github.com/MKMuhammetKaradag/go-microservice/auth-service/database"
+	// "github.com/MKMuhammetKaradag/go-microservice/auth-service/database"
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/dto"
-	"github.com/MKMuhammetKaradag/go-microservice/auth-service/models"
+
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/pkg/services"
+	"github.com/MKMuhammetKaradag/go-microservice/shared/database"
+	"github.com/MKMuhammetKaradag/go-microservice/shared/messaging"
 	authMiddleware "github.com/MKMuhammetKaradag/go-microservice/shared/middlewares"
+	"github.com/MKMuhammetKaradag/go-microservice/shared/models"
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
-	"go.mongodb.org/mongo-driver/bson"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthController struct {
 	authService *services.AuthService
+	rabbitMQ    *messaging.RabbitMQ
 }
 
-func NewAuthController() *AuthController {
+func NewAuthController(rabbitMQ *messaging.RabbitMQ) *AuthController {
 	return &AuthController{
 		authService: services.NewAuthService(),
+		rabbitMQ:    rabbitMQ,
 	}
 }
 
@@ -80,6 +82,24 @@ func (ctrl *AuthController) ActivationUser(w http.ResponseWriter, r *http.Reques
 		respondWithError(w, http.StatusConflict, err.Error())
 		return
 	}
+	userCreatedMessage := messaging.Message{
+		Type: "user_created",
+		Data: map[string]interface{}{
+			"user_id":   activationUser.ID, // MongoDB'de oluşan ID
+			"email":     activationUser.Email,
+			"firstName": activationUser.FirstName,
+			"age":       activationUser.Age,
+			"createdAt": activationUser.CreatedAt,
+			// Diğer gerekli kullanıcı bilgileri
+		},
+	}
+
+	err = ctrl.rabbitMQ.PublishMessage(context.Background(), userCreatedMessage)
+	if err != nil {
+		log.Printf("Kullanıcı oluşturma mesajı gönderilemedi: %v", err)
+		// İşleme devam et, kritik hata değil
+	}
+
 	w.WriteHeader(http.StatusCreated)
 	render.JSON(w, r, map[string]interface{}{
 		"message": "Kullanıcı başarıyla oluşturuldu-asa",
@@ -87,54 +107,59 @@ func (ctrl *AuthController) ActivationUser(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-func Login(w http.ResponseWriter, r *http.Request) {
+func (ctrl *AuthController) SignIn(w http.ResponseWriter, r *http.Request) {
 	var input models.User
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
 		return
 	}
 
-	collection := database.GetCollection("authDB", "users")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// collection := database.GetCollection("authDB", "users")
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancel()
 
-	var user models.User
-	err := collection.FindOne(ctx, bson.M{"email": input.Email}).Decode(&user)
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Geçersiz e-posta")
-		return
-	}
+	// var user models.User
+	// err := collection.FindOne(ctx, bson.M{"email": input.Email}).Decode(&user)
+	// if err != nil {
+	// 	respondWithError(w, http.StatusUnauthorized, "Geçersiz e-posta")
+	// 	return
+	// }
 
-	// Şifreyi doğrula
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password))
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "yanlış şifre")
-		return
-	}
+	// // Şifreyi doğrula
+	// err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password))
+	// if err != nil {
+	// 	respondWithError(w, http.StatusUnauthorized, "yanlış şifre")
+	// 	return
+	// }
 
-	// Redis'e oturum kaydet
-	sessionKey := "session:" + hex.EncodeToString(user.ID[:])
-	fmt.Println(sessionKey)
+	// // Redis'e oturum kaydet
+	// sessionKey := "session:" + hex.EncodeToString(user.ID[:])
+	// fmt.Println(sessionKey)
 
-	userData := map[string]string{
-		"email":    user.Email,
-		"username": user.Username,
-	}
-	userDataJson, err := json.Marshal(userData)
+	// userData := map[string]string{
+	// 	"email":    user.Email,
+	// 	"username": user.Username,
+	// }
+	// userDataJson, err := json.Marshal(userData)
+	// if err != nil {
+	// 	respondWithError(w, http.StatusInternalServerError, "Kullanıcı verisi serileştirilemedi")
+	// 	return
+	// }
+	// err = database.RedisClient.Set(sessionKey, userDataJson, 24*time.Hour).Err()
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	respondWithError(w, http.StatusInternalServerError, "Oturum kaydedilemedi")
+	// 	return
+	// }
+	user, err := ctrl.authService.SignIn(&input)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Kullanıcı verisi serileştirilemedi")
-		return
-	}
-	err = database.RedisClient.Set(sessionKey, userDataJson, 24*time.Hour).Err()
-	if err != nil {
-		fmt.Println(err)
-		respondWithError(w, http.StatusInternalServerError, "Oturum kaydedilemedi")
+		respondWithError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 
 	cookie := &http.Cookie{
 		Name:     "session_id",
-		Value:    hex.EncodeToString(user.ID[:]),
+		Value:    user.ID,
 		Path:     "/",
 		MaxAge:   60 * 60 * 24, // 30 dakika
 		HttpOnly: true,
@@ -143,8 +168,9 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, cookie)
 	w.WriteHeader(http.StatusOK)
-	render.JSON(w, r, map[string]string{
+	render.JSON(w, r, map[string]interface{}{
 		"message": "Giriş başarılı",
+		"user":    user,
 	})
 }
 

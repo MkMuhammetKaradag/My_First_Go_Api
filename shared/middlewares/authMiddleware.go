@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/MKMuhammetKaradag/go-microservice/auth-service/database"
+	"github.com/MKMuhammetKaradag/go-microservice/shared/database"
 )
 
 func respondWithError(w http.ResponseWriter, code int, message string) {

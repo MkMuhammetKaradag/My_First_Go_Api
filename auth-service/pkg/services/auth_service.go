@@ -3,15 +3,18 @@ package services
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"math/rand"
 	"time"
 
-	"github.com/MKMuhammetKaradag/go-microservice/auth-service/database"
+	// "github.com/MKMuhammetKaradag/go-microservice/auth-service/database"
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/dto"
-	"github.com/MKMuhammetKaradag/go-microservice/auth-service/models"
+
+	"github.com/MKMuhammetKaradag/go-microservice/shared/database"
+	"github.com/MKMuhammetKaradag/go-microservice/shared/models"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -82,7 +85,7 @@ func (s *AuthService) Register(user *models.User) (*dto.UserResponse, error) {
 	return response, nil
 }
 
-// const ACTIVATION_CODE_LENGTH = 4 
+// const ACTIVATION_CODE_LENGTH = 4
 func GenerateActivationCode() string {
 
 	rand.Seed(time.Now().UnixNano())
@@ -90,7 +93,7 @@ func GenerateActivationCode() string {
 
 	// 4 haneye tamamlayarak string'e çevir
 	return fmt.Sprintf("%04d", num)
-	
+
 }
 
 func (s *AuthService) SignUp(user *models.User) (string, error) {
@@ -154,4 +157,50 @@ func (s *AuthService) ActivationUser(activationCode, activationToken string) (*d
 	fmt.Println("rolstrt:", roles, "user roles", userRoles)
 
 	return s.Register(user)
+}
+
+func (s *AuthService) SignIn(input *models.User) (*dto.UserResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var user models.User
+
+	err := s.collection.FindOne(ctx, bson.M{"email": input.Email}).Decode(&user)
+	if err != nil {
+		return nil, errors.New("Geçersiz e-posta")
+	}
+
+	// Şifreyi doğrula
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password))
+	if err != nil {
+		return nil, errors.New("yanlış şifre")
+	}
+
+	// Redis'e oturum kaydet
+	sessionKey := "session:" + hex.EncodeToString(user.ID[:])
+
+	userData := map[string]string{
+		"id":       user.ID.Hex(),
+		"email":    user.Email,
+		"username": user.Username,
+	}
+
+	userDataJson, err := json.Marshal(userData)
+	if err != nil {
+		return nil, errors.New("Kullanıcı verisi serileştirilemedi")
+	}
+	err = database.RedisClient.Set(sessionKey, userDataJson, 24*time.Hour).Err()
+	if err != nil {
+		return nil, errors.New("oturum oluşturulurken hata oluştu")
+	}
+
+	response := &dto.UserResponse{
+		ID:        hex.EncodeToString(user.ID[:]),
+		Username:  user.Username,
+		Email:     user.Email,
+		FirstName: user.FirstName,
+		Age:       *user.Age,
+		CreatedAt: user.CreatedAt,
+	}
+	return response, nil
+
 }
