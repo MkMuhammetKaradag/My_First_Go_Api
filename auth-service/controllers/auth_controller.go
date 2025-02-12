@@ -7,10 +7,8 @@ import (
 	"log"
 	"net/http"
 
-	// "github.com/MKMuhammetKaradag/go-microservice/auth-service/database"
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/dto"
-
-	"github.com/MKMuhammetKaradag/go-microservice/auth-service/pkg/services"
+	"github.com/MKMuhammetKaradag/go-microservice/auth-service/services"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/database"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/messaging"
 	authMiddleware "github.com/MKMuhammetKaradag/go-microservice/shared/middlewares"
@@ -114,43 +112,6 @@ func (ctrl *AuthController) SignIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// collection := database.GetCollection("authDB", "users")
-	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	// defer cancel()
-
-	// var user models.User
-	// err := collection.FindOne(ctx, bson.M{"email": input.Email}).Decode(&user)
-	// if err != nil {
-	// 	respondWithError(w, http.StatusUnauthorized, "Geçersiz e-posta")
-	// 	return
-	// }
-
-	// // Şifreyi doğrula
-	// err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password))
-	// if err != nil {
-	// 	respondWithError(w, http.StatusUnauthorized, "yanlış şifre")
-	// 	return
-	// }
-
-	// // Redis'e oturum kaydet
-	// sessionKey := "session:" + hex.EncodeToString(user.ID[:])
-	// fmt.Println(sessionKey)
-
-	// userData := map[string]string{
-	// 	"email":    user.Email,
-	// 	"username": user.Username,
-	// }
-	// userDataJson, err := json.Marshal(userData)
-	// if err != nil {
-	// 	respondWithError(w, http.StatusInternalServerError, "Kullanıcı verisi serileştirilemedi")
-	// 	return
-	// }
-	// err = database.RedisClient.Set(sessionKey, userDataJson, 24*time.Hour).Err()
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	respondWithError(w, http.StatusInternalServerError, "Oturum kaydedilemedi")
-	// 	return
-	// }
 	user, err := ctrl.authService.SignIn(&input)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, err.Error())

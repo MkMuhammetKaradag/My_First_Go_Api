@@ -11,8 +11,7 @@ type UserRole string
 
 const (
 	ADMIN   UserRole = "admin"
-	COACH   UserRole = "coach"
-	STUDENT UserRole = "student"
+	TEST   UserRole = "test"
 	USER    UserRole = "user"
 )
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"time"
-
 	"github.com/MKMuhammetKaradag/go-microservice/shared/database"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -15,44 +14,6 @@ import (
 const authDB = "authDB"
 
 var MongoClient *mongo.Client
-
-// func ConnectMongoDB(mongoURI string) {
-// 	// Bağlantı URI'si
-// 	// mongoURI := "mongodb://localhost:27017"
-
-// 	// MongoDB Bağlantı Seçenekleri
-// 	clientOptions := options.Client().ApplyURI(mongoURI)
-
-// 	// Bağlantıyı başlat
-// 	client, err := mongo.NewClient(clientOptions)
-// 	if err != nil {
-// 		log.Fatalf("MongoDB client oluşturulamadı: %v", err)
-// 	}
-
-// 	// Bağlantıyı aç
-// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-// 	defer cancel()
-// 	err = client.Connect(ctx)
-// 	if err != nil {
-// 		log.Fatalf("MongoDB'ye bağlanılamadı: %v", err)
-// 	}
-
-// 	// Bağlantıyı test et
-// 	err = client.Ping(ctx, nil)
-// 	if err != nil {
-// 		log.Fatalf("MongoDB ping başarısız: %v", err)
-// 	}
-
-// 	fmt.Println("MongoDB bağlantısı başarılı!")
-// 	MongoClient = client
-
-// 	createUserCollectionWithSchema()
-// 	createPasswordResetCollectionWithSchema()
-// 	fmt.Println("Koleksiyonlar ve şemalar oluşturuldu")
-// }
-// func GetCollection(databaseName string, collectionName string) *mongo.Collection {
-// 	return MongoClient.Database(databaseName).Collection(collectionName)
-// }
 
 func CreateUniqueIndexes(databaseName string, collectionName string) error {
 	collection := database.GetCollection(authDB, "users")

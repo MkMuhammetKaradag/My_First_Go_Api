@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-
 	"github.com/MKMuhammetKaradag/go-microservice/shared/database"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/models"
 	"go.mongodb.org/mongo-driver/mongo"
