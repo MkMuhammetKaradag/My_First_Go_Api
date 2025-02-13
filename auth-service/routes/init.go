@@ -16,7 +16,7 @@ func CreateServer(rabbitMQ *messaging.RabbitMQ) *chi.Mux {
 		r.Post("/activationUser", authController.ActivationUser)
 		r.Post("/signIn", authController.SignIn)
 		r.Post("/forgotPassword", authController.ForgotPassword)
-		r.Post("/resetPassword", authController.SignIn)
+		r.Post("/resetPassword", authController.ResetPassword)
 
 		r.Group(func(protectedRouter chi.Router) {
 			protectedRouter.Use(middlewares.AuthMiddleware)

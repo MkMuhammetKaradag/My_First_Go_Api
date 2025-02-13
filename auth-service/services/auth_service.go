@@ -308,3 +308,46 @@ func (s *AuthService) ForgotPassword(email string) (*string, *string, error) {
 	return &link, &user.Username, nil
 
 }
+
+func (s *AuthService) ResetPassword(input *dto.ResetPasswordDto) (*string, error) {
+	var passwordReset models.PasswordReset
+	filter := bson.M{
+		"token": input.Token,
+	}
+	err := s.passwordResetCollection.FindOne(context.Background(), filter).Decode(&passwordReset)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, errors.New("token  Not Found")
+		}
+		return nil, err
+	}
+	
+	var user models.User
+	err = s.collection.FindOne(context.Background(), bson.M{"_id": passwordReset.UserID}).Decode(&user)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, errors.New("User Not Found")
+		}
+		return nil, err
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+
+	if err != nil {
+		return nil, errors.New("An error occurred while processing the password.")
+	}
+	
+	update := bson.M{"$set": bson.M{"password": string(hashedPassword)}}
+	_, err = s.collection.UpdateOne(context.Background(), bson.M{"_id": passwordReset.UserID}, update)
+	if err != nil {
+		return nil, err
+	}
+
+	
+	_, err = s.passwordResetCollection.DeleteOne(context.Background(), bson.M{"_id": passwordReset.ID})
+	if err != nil {
+		return nil, err
+	}
+	message := "Password successfully reset"
+	return &message, nil
+}

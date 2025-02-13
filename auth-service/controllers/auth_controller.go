@@ -235,3 +235,21 @@ func (ctrl *AuthController) ForgotPassword(w http.ResponseWriter, r *http.Reques
 		// "token":   token,
 	})
 }
+
+func (ctrl *AuthController) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var input dto.ResetPasswordDto
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
+		return
+	}
+	token, err := ctrl.authService.ResetPassword(&input)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	render.JSON(w, r, map[string]interface{}{
+		"message": token,
+	})
+}
