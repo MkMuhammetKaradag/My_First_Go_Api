@@ -5,7 +5,7 @@
 *.so
 *.dylib
 *.env
-
+rabbitmq.comment
 http.log
 
 # Test binary, build with `go test -c`

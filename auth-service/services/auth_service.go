@@ -12,6 +12,7 @@ import (
 
 	// "github.com/MKMuhammetKaradag/go-microservice/auth-service/database"
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/dto"
+	"github.com/google/uuid"
 
 	"github.com/MKMuhammetKaradag/go-microservice/shared/database"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/models"
@@ -23,25 +24,89 @@ import (
 )
 
 type AuthService struct {
-	collection *mongo.Collection
+	collection              *mongo.Collection
+	passwordResetCollection *mongo.Collection
 }
 
 func NewAuthService() *AuthService {
 	return &AuthService{
-		collection: database.MongoClient.Database("authDB").Collection("users"),
+		collection:              database.MongoClient.Database("authDB").Collection("users"),
+		passwordResetCollection: database.GetCollection("authDB", "passwordresets"),
 	}
 }
 
 func (s *AuthService) CheckExistingUser(email, username string) (bool, error) {
-	filter := bson.M{"$or": []bson.M{
-		{"email": email},
-		{"username": username},
-	}}
+	// filter := bson.M{"$or": []bson.M{
+	// 	{"email": email},
+	// 	{"username": username},
+	// }}
+	// count, err := s.collection.CountDocuments(context.Background(), filter)
+	// return count > 0, err
+	// Dinamik filtre oluştur
+	var filters []bson.M
+
+	if email != "" {
+		filters = append(filters, bson.M{"email": email})
+	}
+	if username != "" {
+		filters = append(filters, bson.M{"username": username})
+	}
+
+	// En az bir filtre varsa devam et
+	if len(filters) == 0 {
+		return false, errors.New("en az bir parametre (email veya username) gereklidir")
+	}
+
+	// Filtreyi $or ile birleştir veya tek filtreyi doğrudan kullan
+	filter := bson.M{}
+	if len(filters) > 1 {
+		filter["$or"] = filters
+	} else {
+		filter = filters[0]
+	}
+
 	count, err := s.collection.CountDocuments(context.Background(), filter)
 	return count > 0, err
 }
 
-func (s *AuthService) Register(user *models.User) (*dto.UserResponse, error) {
+func (s *AuthService) FindUser(email, userName string) (*models.User, error) {
+	var filters []bson.M
+
+	if email != "" {
+		filters = append(filters, bson.M{"email": email})
+	}
+	if userName != "" {
+		filters = append(filters, bson.M{"username": userName})
+	}
+
+	// En az bir filtre varsa devam et
+	if len(filters) == 0 {
+		return nil, errors.New("en az bir parametre (email veya userName) gereklidir")
+	}
+
+	// Filtreyi $or ile birleştir veya tek filtreyi doğrudan kullan
+	filter := bson.M{}
+	if len(filters) > 1 {
+		filter["$or"] = filters
+	} else {
+		filter = filters[0]
+	}
+
+	// Kullanıcıyı bul
+	var user models.User
+	err := s.collection.FindOne(context.Background(), filter).Decode(&user)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, errors.New("Kulllanıcı bulunamadı") // Kullanıcı bulunamadı
+		}
+		return nil, err
+	}
+
+	return &user, nil
+
+}
+
+func (s *AuthService) Register(user *models.User) (*models.User, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -74,15 +139,15 @@ func (s *AuthService) Register(user *models.User) (*dto.UserResponse, error) {
 	}
 	user.ID = result.InsertedID.(primitive.ObjectID)
 
-	response := &dto.UserResponse{
-		ID:        hex.EncodeToString(user.ID[:]),
-		Username:  user.Username,
-		Email:     user.Email,
-		FirstName: user.FirstName,
-		Age:       *user.Age,
-		CreatedAt: user.CreatedAt,
-	}
-	return response, nil
+	// response := &dto.UserResponse{
+	// 	ID:        hex.EncodeToString(user.ID[:]),
+	// 	Username:  user.Username,
+	// 	Email:     user.Email,
+	// 	FirstName: user.FirstName,
+	// 	Age:       *user.Age,
+	// 	CreatedAt: user.CreatedAt,
+	// }
+	return user, nil
 }
 
 // const ACTIVATION_CODE_LENGTH = 4
@@ -96,7 +161,7 @@ func GenerateActivationCode() string {
 
 }
 
-func (s *AuthService) SignUp(user *models.User) (string, error) {
+func (s *AuthService) SignUp(user *models.User) (string, string, error) {
 	secretKey := "your-secret-key"
 
 	jwtService := NewJwtHelperService(secretKey)
@@ -111,12 +176,12 @@ func (s *AuthService) SignUp(user *models.User) (string, error) {
 	}
 
 	fmt.Println("Activation Code:", activationCode)
-	return token, nil
+	return activationCode, token, nil
 }
 func ptrToInt(i int) *int {
 	return &i
 }
-func (s *AuthService) ActivationUser(activationCode, activationToken string) (*dto.UserResponse, error) {
+func (s *AuthService) ActivationUser(activationCode, activationToken string) (*models.User, error) {
 	secretKey := "your-secret-key"
 
 	jwtService := NewJwtHelperService(secretKey)
@@ -202,5 +267,44 @@ func (s *AuthService) SignIn(input *models.User) (*dto.UserResponse, error) {
 		CreatedAt: user.CreatedAt,
 	}
 	return response, nil
+
+}
+
+func (s *AuthService) GenerateForgotPasswordLink(userId primitive.ObjectID) (string, error) {
+	// UUID oluştur
+	resetToken := uuid.NewString()
+
+	// Token süresini belirle (şu anki zamana +1 saat)
+	expiresAt := time.Now().Add(1 * time.Hour)
+
+	// MongoDB'ye kaydedilecek veri
+	passwordReset := models.PasswordReset{
+		UserID:    userId,
+		Token:     resetToken,
+		ExpiresAt: expiresAt,
+	}
+
+	// MongoDB'ye kaydet
+	_, err := s.passwordResetCollection.InsertOne(context.Background(), passwordReset)
+	if err != nil {
+		return "", err
+	}
+
+	return resetToken, nil
+}
+
+func (s *AuthService) ForgotPassword(email string) (*string, *string, error) {
+
+	user, err := s.FindUser(email, "")
+	if err != nil {
+		return nil, nil, err
+	}
+	token, err := s.GenerateForgotPasswordLink(user.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	link := fmt.Sprintf("http//localhost:8000/resetPassword?:%s", string(token))
+	return &link, &user.Username, nil
 
 }

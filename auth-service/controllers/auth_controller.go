@@ -11,7 +11,7 @@ import (
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/services"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/database"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/messaging"
-	authMiddleware "github.com/MKMuhammetKaradag/go-microservice/shared/middlewares"
+	"github.com/MKMuhammetKaradag/go-microservice/shared/middlewares"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/models"
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
@@ -53,13 +53,28 @@ func (ctrl *AuthController) SignUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	activationToken, err := ctrl.authService.SignUp(&user)
+	activationCode, activationToken, err := ctrl.authService.SignUp(&user)
 
 	if err != nil {
 		respondWithError(w, http.StatusConflict, err.Error())
 		return
 	}
+	userActiveMessage := messaging.Message{
+		Type:      "active_user",
+		ToService: messaging.EmailService,
+		Data: map[string]interface{}{
+			"email":           user.Email,
+			"activation_code": activationCode,
+			"template_name":   "activation_email.html",
+			"userName":        user.Username,
+		},
+	}
 
+	err = ctrl.rabbitMQ.PublishMessage(context.Background(), userActiveMessage)
+	if err != nil {
+		log.Printf("Kullanıcı oluşturma mesajı gönderilemedi: %v", err)
+
+	}
 	w.WriteHeader(http.StatusCreated)
 	render.JSON(w, r, map[string]interface{}{
 		"message":             "Kullanıcı başarıyla oluşturuldu-asa",
@@ -81,13 +96,15 @@ func (ctrl *AuthController) ActivationUser(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	userCreatedMessage := messaging.Message{
-		Type: "user_created",
+		Type:      "user_created",
+		ToService: messaging.ServiceType("UserService"),
 		Data: map[string]interface{}{
 			"user_id":   activationUser.ID, // MongoDB'de oluşan ID
 			"email":     activationUser.Email,
 			"firstName": activationUser.FirstName,
 			"age":       activationUser.Age,
 			"createdAt": activationUser.CreatedAt,
+			"username":  activationUser.Username,
 			// Diğer gerekli kullanıcı bilgileri
 		},
 	}
@@ -135,15 +152,14 @@ func (ctrl *AuthController) SignIn(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func Logout(w http.ResponseWriter, r *http.Request) {
+func (ctrl *AuthController) Logout(w http.ResponseWriter, r *http.Request) {
 
 	cookieSessionId, err := r.Cookie("session_id")
 
 	if err != nil {
-		// Return unauthorized if no session token exists
+
 		respondWithError(w, http.StatusInternalServerError, "Giriş yapılmamış")
-		// c.JSON(http.StatusUnauthorized, gin.H{"error": "Giriş yapılmamış"})
-		// c.Abort()
+
 		return
 	}
 
@@ -151,14 +167,13 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 	err = database.RedisClient.Del(sessionKey).Err()
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Oturum sonlandırılamadı")
-		// c.JSON(http.StatusInternalServerError, gin.H{"error": "Oturum sonlandırılamadı"})
 		return
 	}
 	cookie := &http.Cookie{
 		Name:     "session_id",
 		Value:    "",
 		Path:     "/",
-		MaxAge:   -1, // Cookie'yi hemen sil
+		MaxAge:   -1,
 		HttpOnly: true,
 	}
 	http.SetCookie(w, cookie)
@@ -171,7 +186,7 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 
 func Protected(w http.ResponseWriter, r *http.Request) {
 
-	userData, ok := authMiddleware.GetUserData(r)
+	userData, ok := middlewares.GetUserData(r)
 	if !ok {
 		respondWithError(w, http.StatusInternalServerError, "Kullanıcı bilgisi bulunamadı")
 		return
@@ -183,5 +198,40 @@ func Protected(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "Protected endpoint",
 		"user":    userData["username"],
+	})
+}
+
+func (ctrl *AuthController) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var input dto.ForgotPasswordDto
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
+		return
+	}
+
+	token, userName, err := ctrl.authService.ForgotPassword(input.Email)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	userActiveMessage := messaging.Message{
+		Type:      "forgot_password",
+		ToService: messaging.EmailService,
+		Data: map[string]interface{}{
+			"email":           input.Email,
+			"activation_code": token,
+			"template_name":   "forgot_password.html",
+			"userName":        userName,
+		},
+	}
+
+	err = ctrl.rabbitMQ.PublishMessage(context.Background(), userActiveMessage)
+	if err != nil {
+		log.Printf("Kullanıcı oluşturma mesajı gönderilemedi: %v", err)
+
+	}
+	w.WriteHeader(http.StatusOK)
+	render.JSON(w, r, map[string]interface{}{
+		"message": "Password reset token sent",
+		// "token":   token,
 	})
 }

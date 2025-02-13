@@ -14,8 +14,9 @@ type Config struct {
 	VHost    string `default:"/"`
 
 	// Exchange ayarları
-	ExchangeName      string `default:"microservices.broadcast"`
-	RetryExchangeName string `default:"microservices.retry"`
+	ExchangeName        string `default:"microservices.broadcast"`
+	// ServiceExchangeName string `default:"microservices.service"`
+	RetryExchangeName   string `default:"microservices.retry"`
 
 	// Retry ayarları
 	MaxRetries  int           `default:"3"`

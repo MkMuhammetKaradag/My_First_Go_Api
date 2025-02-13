@@ -33,6 +33,7 @@ func main() {
 
 	// Mesaj dinleyiciyi başlat
 	err = rabbit.ConsumeMessages(func(msg messaging.Message) error {
+		fmt.Println(msg.Type)
 		if msg.Type == "user_created" {
 			fmt.Println("user_creat geldi")
 			fmt.Println(msg)
@@ -75,6 +76,7 @@ func handleUserCreated(msg messaging.Message) error {
 		ID:        objectID,
 		Email:     data["email"].(string),
 		FirstName: data["firstName"].(string),
+		Username:  data["username"].(string),
 		Age:       agePointer,
 	}
 

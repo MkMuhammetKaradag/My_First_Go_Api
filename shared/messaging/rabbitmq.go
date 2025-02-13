@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -31,18 +32,18 @@ func NewRabbitMQ(config Config, serviceType ServiceType) (*RabbitMQ, error) {
 		reconnect: make(chan bool),
 	}
 
-	if err := r.connect(); err != nil {
+	if err := r.connect(serviceType); err != nil {
 		return nil, err
 	}
 
 	// Start connection monitoring
-	go r.monitorConnection()
+	go r.monitorConnection(serviceType)
 
 	return r, nil
 }
 
 // connect establishes connection to RabbitMQ
-func (r *RabbitMQ) connect() error {
+func (r *RabbitMQ) connect(serviceType ServiceType) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -63,7 +64,7 @@ func (r *RabbitMQ) connect() error {
 	}
 
 	// Set up exchanges
-	if err := r.setupExchanges(ch); err != nil {
+	if err := r.setupExchanges(ch, serviceType); err != nil {
 		ch.Close()
 		conn.Close()
 		return err
@@ -86,6 +87,7 @@ func (r *RabbitMQ) PublishMessage(ctx context.Context, msg Message) error {
 	if msg.Created.IsZero() {
 		msg.Created = time.Now()
 	}
+	fmt.Println(msg)
 
 	// Set source service
 	msg.FromService = r.service
@@ -99,7 +101,26 @@ func (r *RabbitMQ) PublishMessage(ctx context.Context, msg Message) error {
 	if err != nil {
 		return &MessagingError{Code: "MARSHAL_FAILED", Message: "Failed to marshal message", Err: err}
 	}
-
+	if msg.ToService != "" {
+		// ServiceType'ı belirleyip dinamik olarak exchange adını alıyoruz
+		serviceExchangeName := fmt.Sprintf("microservices.%s.service", msg.ToService)
+		fmt.Println(serviceExchangeName)
+		return r.channel.PublishWithContext(ctx,
+			serviceExchangeName, // direct exchange, her servis için farklı bir isim
+			"",                  // Routing key
+			true,                // mandatory
+			false,               // immediate
+			amqp.Publishing{
+				ContentType:  "application/json",
+				Body:         body,
+				MessageId:    msg.ID,
+				Timestamp:    msg.Created,
+				Priority:     uint8(msg.Priority),
+				Headers:      amqp.Table(msg.Headers),
+				DeliveryMode: 2, // persistent
+			},
+		)
+	}
 	return r.channel.PublishWithContext(ctx,
 		r.config.ExchangeName,
 		"",    // routing key
@@ -137,8 +158,19 @@ func (r *RabbitMQ) ConsumeMessages(handler MessageHandler) error {
 	// Bind queue to exchange
 	err = r.channel.QueueBind(
 		q.Name,
-		"", // routing key
+		string(r.service), // routing key
 		r.config.ExchangeName,
+		false,
+		nil,
+	)
+	if err != nil {
+		return &MessagingError{Code: "BIND_FAILED", Message: "Failed to bind queue", Err: err}
+	}
+	serviceExchangeName := fmt.Sprintf("microservices.%s.service", string(r.service))
+	err = r.channel.QueueBind(
+		q.Name,
+		"", // routing key
+		serviceExchangeName,
 		false,
 		nil,
 	)
@@ -189,7 +221,7 @@ func (r *RabbitMQ) ConsumeMessages(handler MessageHandler) error {
 }
 
 // monitorConnection monitors and handles reconnection
-func (r *RabbitMQ) monitorConnection() {
+func (r *RabbitMQ) monitorConnection(serviceType ServiceType) {
 	for {
 		if r.closed {
 			return
@@ -198,7 +230,7 @@ func (r *RabbitMQ) monitorConnection() {
 		if r.conn.IsClosed() {
 			log.Println("Connection lost. Attempting to reconnect...")
 			for {
-				if err := r.connect(); err == nil {
+				if err := r.connect(serviceType); err == nil {
 					log.Println("Reconnected successfully")
 					break
 				}
@@ -228,7 +260,7 @@ func (r *RabbitMQ) Close() error {
 }
 
 // Private helper methods
-func (r *RabbitMQ) setupExchanges(ch *amqp.Channel) error {
+func (r *RabbitMQ) setupExchanges(ch *amqp.Channel, serviceType ServiceType) error {
 	// Declare main exchange
 	err := ch.ExchangeDeclare(
 		r.config.ExchangeName,
@@ -241,6 +273,22 @@ func (r *RabbitMQ) setupExchanges(ch *amqp.Channel) error {
 	)
 	if err != nil {
 		return err
+	}
+	if serviceType != "" {
+		serviceExchangeName := fmt.Sprintf("microservices.%s.service", serviceType)
+		err = ch.ExchangeDeclare(
+			serviceExchangeName,
+			"direct", // type
+			true,     // durable
+			false,    // auto-deleted
+			false,    // internal
+			false,    // no-wait
+			nil,      // arguments
+		)
+		if err != nil {
+			return err
+		}
+
 	}
 
 	// Declare retry exchange if enabled

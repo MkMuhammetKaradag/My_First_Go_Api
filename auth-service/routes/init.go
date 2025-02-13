@@ -14,12 +14,14 @@ func CreateServer(rabbitMQ *messaging.RabbitMQ) *chi.Mux {
 	r.Route("/auth", func(r chi.Router) {
 		r.Post("/signUp", authController.SignUp)
 		r.Post("/activationUser", authController.ActivationUser)
-		r.Post("/login", authController.SignIn)
+		r.Post("/signIn", authController.SignIn)
+		r.Post("/forgotPassword", authController.ForgotPassword)
+		r.Post("/resetPassword", authController.SignIn)
 
-		// Korunan rotalar
 		r.Group(func(protectedRouter chi.Router) {
 			protectedRouter.Use(middlewares.AuthMiddleware)
-			protectedRouter.Post("/logout", controllers.Logout)
+			protectedRouter.Post("/logout", authController.Logout)
+			protectedRouter.Get("/me", authController.Logout)
 			protectedRouter.Get("/protected", controllers.Protected)
 		})
 	})
