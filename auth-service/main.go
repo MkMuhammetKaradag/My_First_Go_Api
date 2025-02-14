@@ -21,6 +21,7 @@ func main() {
 	repository.InitAuthDatabase()
 	// database.ConnectRedis()
 	database.ConnectRedis("localhost:6379", 0)
+	userRepo := repository.NewUserRepository(database.GetCollection("authDB", "users"))
 
 	config := messaging.NewDefaultConfig()
 	config.RetryTypes = []string{"user_created"}
@@ -34,7 +35,7 @@ func main() {
 
 	port := 8080
 	fmt.Printf("Auth Service running on port %d\n", port)
-	r := routes.CreateServer(rabbitMQ, redisRepo)
+	r := routes.CreateServer(rabbitMQ, redisRepo, userRepo)
 	http.ListenAndServe(fmt.Sprintf(":%d", port), r)
 
 }

@@ -332,3 +332,25 @@ func (s *AuthService) ResetPassword(input *dto.ResetPasswordDto) (*string, error
 	message := "Password successfully reset"
 	return &message, nil
 }
+
+func (s *AuthService) UpdateStatus(userId, status string) error {
+
+	objID, err := primitive.ObjectIDFromHex(userId)
+	if err != nil {
+		return errors.New("geçersiz kullanıcı ID'si")
+	}
+
+	// Durumu güncelle
+	filter := bson.M{"_id": objID}
+	update := bson.M{"$set": bson.M{"status": status}}
+
+	result, err := s.collection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		return err
+	}
+
+	if result.ModifiedCount == 0 {
+		return errors.New("kullanıcı bulunamadı veya durum güncellenmedi")
+	}
+	return nil
+}

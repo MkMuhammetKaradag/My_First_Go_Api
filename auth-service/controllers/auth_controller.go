@@ -288,3 +288,36 @@ func (ctrl *AuthController) ResetPassword(w http.ResponseWriter, r *http.Request
 		"message": token,
 	})
 }
+
+func (ctrl *AuthController) UpdateStatus(w http.ResponseWriter, r *http.Request) {
+	var input dto.UpdateStatusDto
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
+		return
+	}
+	userData, ok := middlewares.GetUserData(r)
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "Kullanıcı bilgisi bulunamadı")
+		return
+	}
+
+	id, exists := userData["id"]
+	if !exists {
+		fmt.Println("id not found in userData")
+	} else {
+		fmt.Println("User ID:", id)
+	}
+	fmt.Println(id, input.Status)
+	err := ctrl.authService.UpdateStatus(id, input.Status)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	ctrl.sessionRepo.PublishStatus(id, "away")
+	w.WriteHeader(http.StatusOK)
+	render.JSON(w, r, map[string]interface{}{
+		"message": "ok",
+	})
+
+}
