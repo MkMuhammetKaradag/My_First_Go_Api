@@ -9,6 +9,7 @@ import (
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/routes"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/database"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/messaging"
+	"github.com/MKMuhammetKaradag/go-microservice/shared/redisrepo"
 )
 
 func main() {
@@ -23,7 +24,7 @@ func main() {
 
 	config := messaging.NewDefaultConfig()
 	config.RetryTypes = []string{"user_created"}
-
+	redisRepo := redisrepo.NewRedisRepository(database.RedisClient) // Redis repository oluşturuldu
 	var err error
 	rabbitMQ, err := messaging.NewRabbitMQ(config, messaging.AuthService)
 	if err != nil {
@@ -33,7 +34,7 @@ func main() {
 
 	port := 8080
 	fmt.Printf("Auth Service running on port %d\n", port)
-	r := routes.CreateServer(rabbitMQ)
+	r := routes.CreateServer(rabbitMQ, redisRepo)
 	http.ListenAndServe(fmt.Sprintf(":%d", port), r)
 
 }

@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -240,28 +239,11 @@ func (s *AuthService) SignIn(input *models.User) (*dto.UserResponse, error) {
 		return nil, errors.New("yanlış şifre")
 	}
 
-	// Redis'e oturum kaydet
-	sessionKey := "session:" + hex.EncodeToString(user.ID[:])
-
-	userData := map[string]string{
-		"id":       user.ID.Hex(),
-		"email":    user.Email,
-		"username": user.Username,
-	}
-
-	userDataJson, err := json.Marshal(userData)
-	if err != nil {
-		return nil, errors.New("Kullanıcı verisi serileştirilemedi")
-	}
-	err = database.RedisClient.Set(sessionKey, userDataJson, 24*time.Hour).Err()
-	if err != nil {
-		return nil, errors.New("oturum oluşturulurken hata oluştu")
-	}
-
 	response := &dto.UserResponse{
 		ID:        hex.EncodeToString(user.ID[:]),
 		Username:  user.Username,
 		Email:     user.Email,
+		Roles:     user.Roles,
 		FirstName: user.FirstName,
 		Age:       *user.Age,
 		CreatedAt: user.CreatedAt,
@@ -321,7 +303,7 @@ func (s *AuthService) ResetPassword(input *dto.ResetPasswordDto) (*string, error
 		}
 		return nil, err
 	}
-	
+
 	var user models.User
 	err = s.collection.FindOne(context.Background(), bson.M{"_id": passwordReset.UserID}).Decode(&user)
 	if err != nil {
@@ -336,14 +318,13 @@ func (s *AuthService) ResetPassword(input *dto.ResetPasswordDto) (*string, error
 	if err != nil {
 		return nil, errors.New("An error occurred while processing the password.")
 	}
-	
+
 	update := bson.M{"$set": bson.M{"password": string(hashedPassword)}}
 	_, err = s.collection.UpdateOne(context.Background(), bson.M{"_id": passwordReset.UserID}, update)
 	if err != nil {
 		return nil, err
 	}
 
-	
 	_, err = s.passwordResetCollection.DeleteOne(context.Background(), bson.M{"_id": passwordReset.ID})
 	if err != nil {
 		return nil, err

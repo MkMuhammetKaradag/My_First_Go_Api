@@ -8,6 +8,7 @@ import (
 	"github.com/MKMuhammetKaradag/go-microservice/shared/database"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/messaging"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/models"
+	"github.com/MKMuhammetKaradag/go-microservice/shared/redisrepo"
 	"github.com/MKMuhammetKaradag/go-microservice/user-service/repository"
 	"github.com/MKMuhammetKaradag/go-microservice/user-service/routes"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -24,7 +25,7 @@ func main() {
 	database.ConnectRedis("localhost:6379", 0)
 	config := messaging.NewDefaultConfig()
 	config.RetryTypes = []string{"user_created"}
-
+	redisRepo := redisrepo.NewRedisRepository(database.RedisClient) // Redis repository oluşturuldu
 	rabbit, err := messaging.NewRabbitMQ(config, messaging.UserService)
 	if err != nil {
 		log.Fatal("RabbitMQ bağlantı hatası:", err)
@@ -46,7 +47,7 @@ func main() {
 	}
 	port := 8081
 	fmt.Printf("Auth Service running on port %d\n", port)
-	r := routes.CreateServer()
+	r := routes.CreateServer(redisRepo)
 	http.ListenAndServe(fmt.Sprintf(":%d", port), r)
 
 }

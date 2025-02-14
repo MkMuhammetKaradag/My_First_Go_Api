@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/dto"
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/services"
-	"github.com/MKMuhammetKaradag/go-microservice/shared/database"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/messaging"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/middlewares"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/models"
+	"github.com/MKMuhammetKaradag/go-microservice/shared/redisrepo"
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
 )
@@ -20,12 +21,14 @@ import (
 type AuthController struct {
 	authService *services.AuthService
 	rabbitMQ    *messaging.RabbitMQ
+	sessionRepo *redisrepo.RedisRepository
 }
 
-func NewAuthController(rabbitMQ *messaging.RabbitMQ) *AuthController {
+func NewAuthController(rabbitMQ *messaging.RabbitMQ, sessionRepo *redisrepo.RedisRepository) *AuthController {
 	return &AuthController{
 		authService: services.NewAuthService(),
 		rabbitMQ:    rabbitMQ,
+		sessionRepo: sessionRepo,
 	}
 }
 
@@ -124,6 +127,7 @@ func (ctrl *AuthController) ActivationUser(w http.ResponseWriter, r *http.Reques
 
 func (ctrl *AuthController) SignIn(w http.ResponseWriter, r *http.Request) {
 	var input models.User
+	fmt.Println("auth controller  yapısına geldi")
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
 		return
@@ -133,6 +137,36 @@ func (ctrl *AuthController) SignIn(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, err.Error())
 		return
+	}
+
+	// Redis'e oturum kaydet
+	sessionKey := "session:" + user.ID
+	rolesJSON, err := json.Marshal(user.Roles)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error())
+		fmt.Println("Hata:", err)
+		return
+	}
+	userData := map[string]string{
+		"id":       user.ID,
+		"email":    user.Email,
+		"roles":    string(rolesJSON),
+		"username": user.Username,
+	}
+
+	// userDataJson, err := json.Marshal(userData)
+	// if err != nil {
+	// 	respondWithError(w, http.StatusUnauthorized, err.Error())
+	// 	return
+	// }
+	// fmt.Println("userData", userData)
+	err = ctrl.sessionRepo.SetSession(sessionKey, userData, 24*time.Hour)
+
+	// database.RedisClient.Set(sessionKey, userDataJson, 24*time.Hour).Err()
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, err.Error())
+		return
+
 	}
 
 	cookie := &http.Cookie{
@@ -164,11 +198,12 @@ func (ctrl *AuthController) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sessionKey := "session:" + cookieSessionId.Value
-	err = database.RedisClient.Del(sessionKey).Err()
+	err = ctrl.sessionRepo.DeleteSession(sessionKey)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Oturum sonlandırılamadı")
 		return
 	}
+	fmt.Println("ok")
 	cookie := &http.Cookie{
 		Name:     "session_id",
 		Value:    "",

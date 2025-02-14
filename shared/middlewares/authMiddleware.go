@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/MKMuhammetKaradag/go-microservice/shared/database"
+	"github.com/MKMuhammetKaradag/go-microservice/shared/redisrepo"
 )
 
 func respondWithError(w http.ResponseWriter, code int, message string) {
@@ -14,8 +14,16 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
+type AuthMiddleware struct {
+	redisRepo *redisrepo.RedisRepository
+}
+
+func NewAuthMiddleware(redisRepo *redisrepo.RedisRepository) *AuthMiddleware {
+	return &AuthMiddleware{redisRepo: redisRepo}
+}
+
 // AuthMiddleware is the JWT validation middleware
-func AuthMiddleware(next http.Handler) http.Handler {
+func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) { // Try to fetch the session token from the cookie
 			publicRoutes := map[string]bool{
@@ -38,19 +46,21 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			sessionKey := "session:" + cookieSessionId.Value
 
 			// Try to fetch session data from Redis
-			tokenRedis, err := database.RedisClient.Get(sessionKey).Result()
+
+			userData, err := m.redisRepo.GetSession(sessionKey)
+			// database.RedisClient.Get(sessionKey).Result()
 			if err != nil {
 				// Handle case where session data is not found in Redis
 				respondWithError(w, http.StatusUnauthorized, "geçersiz oturum")
 				return
 			}
 
-			var userData map[string]string
-			err = json.Unmarshal([]byte(tokenRedis), &userData)
-			if err != nil {
-				respondWithError(w, http.StatusInternalServerError, "Veri çözümleme hatası")
-				return
-			}
+			// var userData map[string]string
+			// err = json.Unmarshal([]byte(tokenRedis), &userData)
+			// if err != nil {
+			// 	respondWithError(w, http.StatusInternalServerError, "Veri çözümleme hatası")
+			// 	return
+			// }
 
 			ctx := context.WithValue(r.Context(), "userData", userData)
 			next.ServeHTTP(w, r.WithContext(ctx))
