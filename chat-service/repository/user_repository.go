@@ -21,3 +21,4 @@ func CreateUser(user *models.User) error {
 	_, err := userCollection.InsertOne(context.Background(), user)
 	return err
 }
+

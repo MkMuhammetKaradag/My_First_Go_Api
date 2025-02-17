@@ -111,7 +111,7 @@ func (ctrl *ChatController) SendMessage(w http.ResponseWriter, r *http.Request) 
 		respondWithError(w, http.StatusConflict, err.Error())
 		return
 	}
-
+	ctrl.sessionRepo.PublishChatMessage(string(input.Chat.Hex()), message.Content, string(userID.Hex()))
 	w.WriteHeader(http.StatusCreated)
 	render.JSON(w, r, map[string]interface{}{
 		"message":     "message  başarıyla oluşturuldu",

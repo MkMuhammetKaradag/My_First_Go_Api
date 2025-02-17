@@ -15,14 +15,15 @@ import (
 )
 
 func main() {
-	// Veritabanlarına bağlan
+
 	database.ConnectMongoDB("mongodb://localhost:27017/chatDB")
-	// if err := repository.CreateUniqueIndexes("authDB", "users"); err != nil {
-	// 	log.Fatal("Index oluşturulurken hata:", err)
-	// }
+
 	repository.InitChatDatabase()
-	// database.ConnectRedis()
 	database.ConnectRedis("localhost:6379", 0)
+	chatRepo := repository.NewChatRepository(database.GetCollection("chatDB", "chats"))
+	// a, error1 := chatRepo.IsUserInChat("", "")
+	// fmt.Println(error1)
+	// fmt.Println(a)
 
 	config := messaging.NewDefaultConfig()
 	config.RetryTypes = []string{"user_created"}
@@ -43,8 +44,8 @@ func main() {
 		return nil
 	})
 	port := 8083
-	fmt.Printf("Auth Service running on port %d\n", port)
-	r := routes.CreateServer(rabbitMQ, redisRepo)
+	fmt.Printf("chat Service running on port %d\n", port)
+	r := routes.CreateServer(rabbitMQ, chatRepo, redisRepo)
 	http.ListenAndServe(fmt.Sprintf(":%d", port), r)
 
 }

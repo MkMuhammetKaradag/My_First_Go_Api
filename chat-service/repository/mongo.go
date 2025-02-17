@@ -48,7 +48,7 @@ func CreateUniqueIndexes() {
 	}
 
 	// Username indeksini kontrol et ve gerekirse oluştur
-	if !existingIndexNames["username_1"] {
+	if !existingIndexNames["username"] {
 		usernameIndexModel := mongo.IndexModel{
 			Keys:    bson.D{{Key: "username", Value: 1}},
 			Options: options.Index().SetUnique(true),
@@ -65,7 +65,7 @@ func CreateUniqueIndexes() {
 	}
 
 	// Email indeksini kontrol et ve gerekirse oluştur
-	if !existingIndexNames["email_1"] {
+	if !existingIndexNames["email"] {
 		emailIndexModel := mongo.IndexModel{
 			Keys:    bson.D{{Key: "email", Value: 1}},
 			Options: options.Index().SetUnique(true),
