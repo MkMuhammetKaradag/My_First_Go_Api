@@ -3,7 +3,9 @@ package middlewares
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/MKMuhammetKaradag/go-microservice/shared/redisrepo"
 )
@@ -35,19 +37,32 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			cookieSessionId, err := r.Cookie("session_id")
-			if err != nil {
+			var token string
 
-				respondWithError(w, http.StatusUnauthorized, err.Error())
-				return
+			// WebSocket isteği mi?
+			if strings.Contains(r.Header.Get("Connection"), "Upgrade") && r.Header.Get("Upgrade") == "websocket" {
+				// Token’ı URL parametresinden veya `Sec-WebSocket-Protocol` başlığından al
+				token = r.URL.Query().Get("token")
+				if token == "" {
+					token = r.Header.Get("session_id")
+					fmt.Println("geldi", token)
+				}
+			} else {
+				// Normal HTTP istekleri için `session_id` çerezini kontrol et
+				cookieSessionId, err := r.Cookie("session_id")
+				if err != nil {
+					respondWithError(w, http.StatusUnauthorized, "Unauthorized: missing session")
+					return
+				}
+				token = "session:" + cookieSessionId.Value
 			}
 
 			// Construct the session key for Redis
-			sessionKey := "session:" + cookieSessionId.Value
+			// sessionKey := "session:" + cookieSessionId.Value
 
 			// Try to fetch session data from Redis
 
-			userData, err := m.redisRepo.GetSession(sessionKey)
+			userData, err := m.redisRepo.GetSession(token)
 			// database.RedisClient.Get(sessionKey).Result()
 			if err != nil {
 				// Handle case where session data is not found in Redis

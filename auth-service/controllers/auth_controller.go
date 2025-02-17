@@ -100,7 +100,7 @@ func (ctrl *AuthController) ActivationUser(w http.ResponseWriter, r *http.Reques
 	}
 	userCreatedMessage := messaging.Message{
 		Type:      "user_created",
-		ToService: messaging.ServiceType("UserService"),
+		// ToService: messaging.ServiceType("UserService"),
 		Data: map[string]interface{}{
 			"user_id":   activationUser.ID, // MongoDB'de oluşan ID
 			"email":     activationUser.Email,

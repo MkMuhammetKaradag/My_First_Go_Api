@@ -41,3 +41,7 @@ func (r *RedisRepository) GetSession(key string) (map[string]string, error) {
 func (r *RedisRepository) DeleteSession(key string) error {
 	return r.Client.Del(key).Err()
 }
+
+func (r *RedisRepository) PublishStatus(userID string, status string) error {
+	return r.Client.Publish("user_status", userID+":"+status).Err()
+}

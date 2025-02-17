@@ -10,9 +10,9 @@ import (
 type UserRole string
 
 const (
-	ADMIN   UserRole = "admin"
-	TEST   UserRole = "test"
-	USER    UserRole = "user"
+	ADMIN UserRole = "admin"
+	TEST  UserRole = "test"
+	USER  UserRole = "user"
 )
 
 type User struct {
@@ -29,12 +29,14 @@ type User struct {
 	DeletedAt    *time.Time         `bson:"deletedAt,omitempty" json:"deletedAt,omitempty"`
 	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
 	UpdatedAt    time.Time          `bson:"updatedAt" json:"updatedAt"`
+	Status       string             `bson:"status" json:"status"`
 }
 
 func NewUser() User {
 	return User{
 		Roles:     []UserRole{USER}, // Default role is "user"
 		IsDeleted: false,
+		Status:    "ofline",
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
