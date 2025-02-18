@@ -36,8 +36,11 @@ func CreateServer(rabbitMQ *messaging.RabbitMQ, chatRepo *repository.ChatReposit
 		r.Group(func(protectedRouter chi.Router) {
 			protectedRouter.Use(authMiddleware.Authenticate)
 			protectedRouter.Post("/create", chatController.CreateChat)
+			protectedRouter.Get("/{chatID}", chatController.CreateChat)
+			protectedRouter.Get("/myChats", chatController.GetMyChats)
 			protectedRouter.Post("/message/create", chatController.SendMessage)
-			protectedRouter.Post("/getUsers", chatController.GetChatUsers)
+			protectedRouter.Post("/addParticipants", chatController.AddParticipants)
+			protectedRouter.Get("/chatDetail", chatController.GetChatUsers)
 			protectedRouter.Get("/chatlisten/{chatID}", wsController.HandleWebSocket)
 		})
 	})

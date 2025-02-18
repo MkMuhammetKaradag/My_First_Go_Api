@@ -35,3 +35,8 @@ type ChatWithUsers struct {
 	CreatedAt    time.Time          `json:"createdAt" bson:"createdAt"`
 	UpdatedAt    time.Time          `json:"updatedAt,omitempty" bson:"updatedAt,omitempty"`
 }
+
+type ChatAddParticipants struct {
+	ChatID primitive.ObjectID `json:"chatId" binding:"required"`
+	Participants []primitive.ObjectID `json:"participants"  binding:"required,min=1,max=100"`
+}

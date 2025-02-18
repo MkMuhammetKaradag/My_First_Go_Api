@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/json"
+
 	"net/http"
 
 	"github.com/MKMuhammetKaradag/go-microservice/chat-service/dto"
@@ -137,6 +138,64 @@ func (ctrl *ChatController) GetChatUsers(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusCreated)
 	render.JSON(w, r, map[string]interface{}{
 		"message": "chat  başarıyla çekildi",
+		"chat":    chat,
+	})
+}
+
+func (ctrl *ChatController) GetMyChats(w http.ResponseWriter, r *http.Request) {
+	userData, ok := middlewares.GetUserData(r)
+	// fmt.Println("hello", userData)
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "Kullanıcı bilgisi bulunamadı")
+		return
+	}
+	userID, exists := userData["id"]
+	if !exists {
+		respondWithError(w, http.StatusInternalServerError, "Kullanıcı bilgisi bulunamadı")
+		return
+	}
+	// Admins dizisini oluştur veya mevcut diziye ekle
+	chat, err := ctrl.chatService.GetMyChatsWithUsersAggregation(userID)
+	if err != nil {
+		respondWithError(w, http.StatusConflict, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	render.JSON(w, r, map[string]interface{}{
+		"message": "chat  başarıyla çekildi",
+		"chat":    chat,
+	})
+
+}
+
+func (ctrl *ChatController) AddParticipants(w http.ResponseWriter, r *http.Request) {
+	userData, ok := middlewares.GetUserData(r)
+	// fmt.Println("hello", userData)
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "Kullanıcı bilgisi bulunamadı")
+		return
+	}
+	userID, exists := userData["id"]
+	if !exists {
+		respondWithError(w, http.StatusInternalServerError, "Kullanıcı bilgisi bulunamadı")
+		return
+	}
+
+	var input dto.ChatAddParticipants
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
+		return
+	}
+	chat, err := ctrl.chatService.AddParticipants(userID, &input)
+	if err != nil {
+		respondWithError(w, http.StatusConflict, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	render.JSON(w, r, map[string]interface{}{
+		"message": "chat  başarıyla  katılımcı eklendi ",
 		"chat":    chat,
 	})
 }

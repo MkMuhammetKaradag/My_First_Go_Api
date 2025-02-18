@@ -34,7 +34,7 @@ func NewWebSocketController(hub *myWebsocket.Hub, userRepo *repository.UserRepos
 func (wc *WebSocketController) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	
 	userData, ok := middlewares.GetUserData(r)
-	fmt.Println("hello", userData)
+	// fmt.Println("hello", userData)
 	if !ok {
 		respondWithError(w, http.StatusInternalServerError, "Kullanıcı bilgisi bulunamadı")
 		return

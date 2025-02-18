@@ -71,7 +71,6 @@ func (s *ChatService) GetChatWithUsersAggregation(chatID primitive.ObjectID) (*d
 
 		bson.D{{Key: "$match", Value: bson.M{"_id": chatID}}},
 
-
 		bson.D{{Key: "$lookup", Value: bson.M{
 			"from":         "users",
 			"localField":   "participants",
@@ -79,14 +78,12 @@ func (s *ChatService) GetChatWithUsersAggregation(chatID primitive.ObjectID) (*d
 			"as":           "participantDetails",
 		}}},
 
-
 		bson.D{{Key: "$lookup", Value: bson.M{
 			"from":         "users",
 			"localField":   "admins",
 			"foreignField": "_id",
 			"as":           "adminDetails",
 		}}},
-
 
 		bson.D{{Key: "$project", Value: bson.M{
 			"_id":                1,
@@ -113,7 +110,6 @@ func (s *ChatService) GetChatWithUsersAggregation(chatID primitive.ObjectID) (*d
 		return nil, fmt.Errorf("chat not found")
 	}
 
-
 	chatData := results[0]
 
 	participantDetails, _ := chatData["participantDetails"].(primitive.A)
@@ -125,7 +121,6 @@ func (s *ChatService) GetChatWithUsersAggregation(chatID primitive.ObjectID) (*d
 	// fmt.Println(participantDetails)
 	// fmt.Println(adminDetails)
 
-
 	for _, p := range participantDetails {
 		participantMap, ok := p.(bson.M)
 		if ok {
@@ -136,7 +131,6 @@ func (s *ChatService) GetChatWithUsersAggregation(chatID primitive.ObjectID) (*d
 			participants = append(participants, user)
 		}
 	}
-
 
 	for _, a := range adminDetails {
 		adminMap, ok := a.(bson.M)
@@ -161,4 +155,190 @@ func (s *ChatService) GetChatWithUsersAggregation(chatID primitive.ObjectID) (*d
 	}
 
 	return chat, nil
+}
+func (s *ChatService) GetMyChatsWithUsersAggregation(userID string) (*dto.ChatWithUsers, error) {
+	chatCollection := s.chatCollection
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	userObjID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, fmt.Errorf("geçersiz userID: %v", err)
+	}
+
+	pipeline := mongo.Pipeline{
+
+		bson.D{{Key: "$match", Value: bson.M{"participants": userObjID}}},
+
+		bson.D{{Key: "$lookup", Value: bson.M{
+			"from":         "users",
+			"localField":   "participants",
+			"foreignField": "_id",
+			"as":           "participantDetails",
+		}}},
+
+		bson.D{{Key: "$lookup", Value: bson.M{
+			"from":         "users",
+			"localField":   "admins",
+			"foreignField": "_id",
+			"as":           "adminDetails",
+		}}},
+
+		bson.D{{Key: "$project", Value: bson.M{
+			"_id":                1,
+			"chatName":           1,
+			"participantDetails": 1,
+			"adminDetails":       1,
+			"createdAt":          1,
+			"updatedAt":          1,
+		}}},
+	}
+
+	cursor, err := chatCollection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var results []bson.M
+	if err = cursor.All(ctx, &results); err != nil {
+		return nil, err
+	}
+
+	if len(results) == 0 {
+		return nil, fmt.Errorf("chat not found")
+	}
+
+	chatData := results[0]
+
+	participantDetails, _ := chatData["participantDetails"].(primitive.A)
+	adminDetails, _ := chatData["adminDetails"].(primitive.A)
+
+	var participants []models.User
+	var admins []models.User
+
+	// fmt.Println(participantDetails)
+	// fmt.Println(adminDetails)
+
+	for _, p := range participantDetails {
+		participantMap, ok := p.(bson.M)
+		if ok {
+			var user models.User
+
+			bytes, _ := bson.Marshal(participantMap)
+			bson.Unmarshal(bytes, &user)
+			participants = append(participants, user)
+		}
+	}
+
+	for _, a := range adminDetails {
+		adminMap, ok := a.(bson.M)
+		if ok {
+			var user models.User
+			bytes, _ := bson.Marshal(adminMap)
+			bson.Unmarshal(bytes, &user)
+			admins = append(admins, user)
+		}
+	}
+
+	chat := &dto.ChatWithUsers{
+		ID:           chatData["_id"].(primitive.ObjectID),
+		ChatName:     chatData["chatName"].(string),
+		Participants: participants,
+		Admins:       admins,
+		CreatedAt:    chatData["createdAt"].(primitive.DateTime).Time(),
+	}
+
+	if updatedAt, ok := chatData["updatedAt"].(primitive.DateTime); ok {
+		chat.UpdatedAt = updatedAt.Time()
+	}
+
+	return chat, nil
+}
+
+func (s *ChatService) AddParticipants(userID string, input *dto.ChatAddParticipants) (*string, error) {
+	// 1. Admin kontrolü ve chat documentini çek
+	userObjID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, fmt.Errorf("geçersiz userID: %v", err)
+	}
+	fmt.Println(input.ChatID, userID, input.Participants)
+	chatFilter := bson.M{
+		"_id":    input.ChatID,
+		"admins": userObjID, // userID'nin admins array'inde olduğunu kontrol et
+	}
+
+	var existingChat struct {
+		Participants []primitive.ObjectID `bson:"participants"`
+	}
+
+	err = s.chatCollection.FindOne(
+		context.Background(),
+		chatFilter,
+	).Decode(&existingChat)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("chat bulunamadı veya admin değilsiniz")
+		}
+		return nil, fmt.Errorf("veritabanı hatası: %v", err)
+	}
+
+	// 2. Mevcut ve yeni katılımcıları karşılaştır
+	existingParticipants := make(map[primitive.ObjectID]bool)
+	for _, p := range existingChat.Participants {
+		existingParticipants[p] = true
+	}
+
+	var alreadyExists []primitive.ObjectID
+	var toAdd []primitive.ObjectID
+
+	for _, newParticipant := range input.Participants {
+		if existingParticipants[newParticipant] {
+			alreadyExists = append(alreadyExists, newParticipant)
+		} else {
+			toAdd = append(toAdd, newParticipant)
+		}
+	}
+
+	// 3. Hata durumlarını kontrol et
+	if len(toAdd) == 0 {
+		if len(alreadyExists) > 0 {
+			return nil, fmt.Errorf(
+				"tüm kullanıcılar zaten ekli: %v",
+				alreadyExists,
+			)
+		}
+		return nil, fmt.Errorf("eklenecek kullanıcı yok")
+	}
+
+	// 4. Yeni katılımcıları ekle
+	update := bson.M{
+		"$addToSet": bson.M{
+			"participants": bson.M{"$each": toAdd},
+		},
+	}
+
+	_, err = s.chatCollection.UpdateOne(
+		context.Background(),
+		bson.M{"_id": input.ChatID},
+		update,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("güncelleme hatası: %v", err)
+	}
+
+	// 5. Sonuç mesajını oluştur
+	successMsg := fmt.Sprintf(
+		"%d kullanıcı başarıyla eklendi. Zaten ekli olanlar: %v",
+		len(toAdd),
+		alreadyExists,
+	)
+
+	// Eğer kısmen başarılıysa özel bir hata türü döndürebilirsiniz
+	if len(alreadyExists) > 0 {
+		return &successMsg, fmt.Errorf(successMsg) // veya özel bir error type
+	}
+
+	return &successMsg, nil
 }

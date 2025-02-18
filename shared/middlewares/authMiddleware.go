@@ -3,7 +3,6 @@ package middlewares
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -45,7 +44,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 				token = r.URL.Query().Get("token")
 				if token == "" {
 					token = r.Header.Get("session_id")
-					fmt.Println("geldi", token)
+					// fmt.Println("geldi", token)
 				}
 			} else {
 				// Normal HTTP istekleri için `session_id` çerezini kontrol et
