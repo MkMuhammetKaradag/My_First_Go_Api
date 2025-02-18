@@ -342,3 +342,74 @@ func (s *ChatService) AddParticipants(userID string, input *dto.ChatAddParticipa
 
 	return &successMsg, nil
 }
+
+func (s *ChatService) LeaveChat(userID, chatID string) (*string, error) {
+	userObjID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, fmt.Errorf("geçersiz userID: %v", err)
+	}
+	chatObjID, err := primitive.ObjectIDFromHex(chatID)
+	if err != nil {
+		return nil, fmt.Errorf("geçersiz chatID: %v", err)
+	}
+
+	chatFilter := bson.M{
+		"_id":          chatObjID,
+		"participants": userObjID,
+	}
+
+	var existingChat struct {
+		Participants []primitive.ObjectID `bson:"participants"`
+	}
+
+	err = s.chatCollection.FindOne(
+		context.Background(),
+		chatFilter,
+	).Decode(&existingChat)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("chat bulunamadı")
+		}
+		return nil, fmt.Errorf("veritabanı hatası: %v", err)
+	}
+
+	existingParticipants := make(map[primitive.ObjectID]bool)
+	for _, p := range existingChat.Participants {
+		existingParticipants[p] = true
+	}
+
+	if !existingParticipants[userObjID] {
+		return nil, fmt.Errorf("kullanıcı katılımcı değil  : %v", err)
+
+	}
+
+	// 4. Yeni katılımcıları ekle
+	// update := bson.M{
+	// 	"$pull": bson.M{
+	// 		"participants": bson.M{"$in": userObjID},
+	// 	},
+	// }
+
+	update := bson.M{
+		"$pull": bson.M{
+			"participants": userObjID, // Tek bir ObjectID'yi kaldır
+		},
+	}
+	_, err = s.chatCollection.UpdateOne(
+		context.Background(),
+		bson.M{"_id": chatObjID},
+		update,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("güncelleme hatası: %v", err)
+	}
+
+	successMsg := fmt.Sprintf(
+		"%v kullanıcı başarıyla silindi",
+		userObjID,
+	)
+
+	return &successMsg, nil
+}
