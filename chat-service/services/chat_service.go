@@ -256,7 +256,7 @@ func (s *ChatService) GetMyChatsWithUsersAggregation(userID string) (*dto.ChatWi
 }
 
 func (s *ChatService) AddParticipants(userID string, input *dto.ChatAddParticipants) (*string, error) {
-	// 1. Admin kontrolü ve chat documentini çek
+
 	userObjID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return nil, fmt.Errorf("geçersiz userID: %v", err)
@@ -264,7 +264,7 @@ func (s *ChatService) AddParticipants(userID string, input *dto.ChatAddParticipa
 	fmt.Println(input.ChatID, userID, input.Participants)
 	chatFilter := bson.M{
 		"_id":    input.ChatID,
-		"admins": userObjID, // userID'nin admins array'inde olduğunu kontrol et
+		"admins": userObjID,
 	}
 
 	var existingChat struct {
@@ -283,7 +283,6 @@ func (s *ChatService) AddParticipants(userID string, input *dto.ChatAddParticipa
 		return nil, fmt.Errorf("veritabanı hatası: %v", err)
 	}
 
-	// 2. Mevcut ve yeni katılımcıları karşılaştır
 	existingParticipants := make(map[primitive.ObjectID]bool)
 	for _, p := range existingChat.Participants {
 		existingParticipants[p] = true
@@ -300,7 +299,6 @@ func (s *ChatService) AddParticipants(userID string, input *dto.ChatAddParticipa
 		}
 	}
 
-	// 3. Hata durumlarını kontrol et
 	if len(toAdd) == 0 {
 		if len(alreadyExists) > 0 {
 			return nil, fmt.Errorf(
@@ -311,7 +309,6 @@ func (s *ChatService) AddParticipants(userID string, input *dto.ChatAddParticipa
 		return nil, fmt.Errorf("eklenecek kullanıcı yok")
 	}
 
-	// 4. Yeni katılımcıları ekle
 	update := bson.M{
 		"$addToSet": bson.M{
 			"participants": bson.M{"$each": toAdd},
@@ -328,21 +325,125 @@ func (s *ChatService) AddParticipants(userID string, input *dto.ChatAddParticipa
 		return nil, fmt.Errorf("güncelleme hatası: %v", err)
 	}
 
-	// 5. Sonuç mesajını oluştur
 	successMsg := fmt.Sprintf(
 		"%d kullanıcı başarıyla eklendi. Zaten ekli olanlar: %v",
 		len(toAdd),
 		alreadyExists,
 	)
 
-	// Eğer kısmen başarılıysa özel bir hata türü döndürebilirsiniz
 	if len(alreadyExists) > 0 {
-		return &successMsg, fmt.Errorf(successMsg) // veya özel bir error type
+		return &successMsg, fmt.Errorf(successMsg)
 	}
 
 	return &successMsg, nil
 }
+func (s *ChatService) RemoveParticipants(userID string, input *dto.ChatRemoveParticipants) (*string, error) {
+	
+	userObjID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, fmt.Errorf("geçersiz userID: %v", err)
+	}
 
+
+	chatFilter := bson.M{
+		"_id":    input.ChatID,
+		"admins": userObjID,
+	}
+
+	var existingChat struct {
+		Participants []primitive.ObjectID `bson:"participants"`
+	}
+
+	err = s.chatCollection.FindOne(
+		context.Background(),
+		chatFilter,
+	).Decode(&existingChat)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("chat bulunamadı veya admin değilsiniz")
+		}
+		return nil, fmt.Errorf("veritabanı hatası: %v", err)
+	}
+
+
+	existingParticipants := make(map[primitive.ObjectID]bool)
+	for _, p := range existingChat.Participants {
+		existingParticipants[p] = true
+	}
+
+	var notFound []primitive.ObjectID
+	var toRemove []primitive.ObjectID
+
+	for _, target := range input.Participants {
+		if existingParticipants[target] {
+			toRemove = append(toRemove, target)
+		} else {
+			notFound = append(notFound, target)
+		}
+	}
+
+
+	if len(toRemove) == 0 {
+		return nil, fmt.Errorf("hiçbir kullanıcı katılımcı listesinde bulunamadı")
+	}
+	fmt.Println(toRemove)
+
+
+	if len(existingChat.Participants) == len(toRemove) {
+		now := time.Now()
+		update := bson.M{
+			"$set": bson.M{
+				"isDeleted": true,
+				"deletedAt": now,
+			},
+			"$pull": bson.M{
+				"participants": bson.M{
+					"$in": toRemove,
+				},
+			},
+		}
+		_, err := s.chatCollection.UpdateOne(context.Background(), bson.M{"_id": input.ChatID}, update)
+		if err != nil {
+			return nil, fmt.Errorf("chat soft delete hatası: %v", err)
+		}
+		successMsg := fmt.Sprintf(
+			"katılımcı kalmadığında chat  silindi ",
+		)
+		return &successMsg, nil
+	}
+	update := bson.M{
+		"$pull": bson.M{
+			"participants": bson.M{
+				"$in": toRemove,
+			},
+		},
+	}
+
+	_, err = s.chatCollection.UpdateOne(
+		context.Background(),
+		bson.M{"_id": input.ChatID},
+		update,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("güncelleme hatası: %v", err)
+	}
+
+	// 6. Sonuç mesajını oluştur
+	successMsg := fmt.Sprintf(
+		"%d kullanıcı başarıyla silindi. Bulunamayanlar: %v",
+		len(toRemove),
+		notFound,
+	)
+
+	// 7. Kısmi başarı durumu
+	if len(notFound) > 0 {
+		return &successMsg, fmt.Errorf(successMsg)
+	}
+
+	return &successMsg, nil
+}
 func (s *ChatService) LeaveChat(userID, chatID string) (*string, error) {
 	userObjID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {

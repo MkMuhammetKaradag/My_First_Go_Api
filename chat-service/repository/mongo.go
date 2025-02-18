@@ -159,8 +159,8 @@ func CreateChatCollectionWithSchema() {
 						"description": "must be a string between 1-100 characters",
 					},
 					"participants": bson.M{
-						"bsonType":    "array",
-						"minItems":    1,
+						"bsonType": "array",
+						// "minItems":    1,
 						"uniqueItems": true,
 						"items": bson.M{
 							"bsonType":    "objectId",

@@ -200,6 +200,37 @@ func (ctrl *ChatController) AddParticipants(w http.ResponseWriter, r *http.Reque
 		"chat":    chat,
 	})
 }
+
+func (ctrl *ChatController) RemoveParticipants(w http.ResponseWriter, r *http.Request) {
+	userData, ok := middlewares.GetUserData(r)
+
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "Kullanıcı bilgisi bulunamadı")
+		return
+	}
+	userID, exists := userData["id"]
+	if !exists {
+		respondWithError(w, http.StatusInternalServerError, "Kullanıcı bilgisi bulunamadı")
+		return
+	}
+
+	var input dto.ChatRemoveParticipants
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
+		return
+	}
+	chat, err := ctrl.chatService.RemoveParticipants(userID, &input)
+	if err != nil {
+		respondWithError(w, http.StatusConflict, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	render.JSON(w, r, map[string]interface{}{
+		"message": "chat  başarıyla  katılımcı Silindi ",
+		"chat":    chat,
+	})
+}
 func (ctrl *ChatController) LeaveChat(w http.ResponseWriter, r *http.Request) {
 	userData, ok := middlewares.GetUserData(r)
 	// fmt.Println("hello", userData)
@@ -218,7 +249,7 @@ func (ctrl *ChatController) LeaveChat(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "Chat bilgisi bulunamadı")
 		return
 	}
-	chat, err := ctrl.chatService.LeaveChat(userID,chatID)
+	chat, err := ctrl.chatService.LeaveChat(userID, chatID)
 	if err != nil {
 		respondWithError(w, http.StatusConflict, err.Error())
 		return

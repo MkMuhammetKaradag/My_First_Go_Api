@@ -37,6 +37,11 @@ type ChatWithUsers struct {
 }
 
 type ChatAddParticipants struct {
-	ChatID primitive.ObjectID `json:"chatId" binding:"required"`
+	ChatID       primitive.ObjectID   `json:"chatId" binding:"required"`
+	Participants []primitive.ObjectID `json:"participants"  binding:"required,min=1,max=100"`
+}
+
+type ChatRemoveParticipants struct {
+	ChatID       primitive.ObjectID   `json:"chatId" binding:"required"`
 	Participants []primitive.ObjectID `json:"participants"  binding:"required,min=1,max=100"`
 }
