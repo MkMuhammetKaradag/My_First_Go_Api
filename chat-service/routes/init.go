@@ -44,6 +44,7 @@ func CreateServer(rabbitMQ *messaging.RabbitMQ, chatRepo *repository.ChatReposit
 			protectedRouter.Post("/leave/{chatID}", chatController.LeaveChat)
 			protectedRouter.Get("/chatDetail", chatController.GetChatUsers)
 			protectedRouter.Get("/chatlisten/{chatID}", wsController.HandleWebSocket)
+			protectedRouter.Get("/messages", chatController.GetChatMessages)
 		})
 	})
 

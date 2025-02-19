@@ -338,12 +338,11 @@ func (s *ChatService) AddParticipants(userID string, input *dto.ChatAddParticipa
 	return &successMsg, nil
 }
 func (s *ChatService) RemoveParticipants(userID string, input *dto.ChatRemoveParticipants) (*string, error) {
-	
+
 	userObjID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return nil, fmt.Errorf("geçersiz userID: %v", err)
 	}
-
 
 	chatFilter := bson.M{
 		"_id":    input.ChatID,
@@ -366,7 +365,6 @@ func (s *ChatService) RemoveParticipants(userID string, input *dto.ChatRemovePar
 		return nil, fmt.Errorf("veritabanı hatası: %v", err)
 	}
 
-
 	existingParticipants := make(map[primitive.ObjectID]bool)
 	for _, p := range existingChat.Participants {
 		existingParticipants[p] = true
@@ -383,12 +381,10 @@ func (s *ChatService) RemoveParticipants(userID string, input *dto.ChatRemovePar
 		}
 	}
 
-
 	if len(toRemove) == 0 {
 		return nil, fmt.Errorf("hiçbir kullanıcı katılımcı listesinde bulunamadı")
 	}
 	fmt.Println(toRemove)
-
 
 	if len(existingChat.Participants) == len(toRemove) {
 		now := time.Now()
@@ -513,4 +509,89 @@ func (s *ChatService) LeaveChat(userID, chatID string) (*string, error) {
 	)
 
 	return &successMsg, nil
+}
+
+func (s *ChatService) GetChatMessages(userID string, input *dto.GetChatMessagesInput) (*[]dto.GetChatMessagesObject, error) {
+
+	skip := (input.Page-1)*input.Limit + input.ExtraPassValue
+	userObjID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, fmt.Errorf("geçersiz userID: %v", err)
+	}
+	chatFilter := bson.M{
+		"_id":          input.ChatID,
+		"participants": userObjID,
+	}
+
+	var chat models.Chat
+
+	err = s.chatCollection.FindOne(
+		context.Background(),
+		chatFilter,
+	).Decode(&chat)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("chat bulunamadı")
+		}
+		return nil, fmt.Errorf("veritabanı hatası: %v", err)
+	}
+
+	messageCollection := s.messageCollection
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err != nil {
+		return nil, fmt.Errorf("geçersiz userID: %v", err)
+	}
+
+	pipeline := mongo.Pipeline{
+
+		bson.D{{Key: "$match", Value: bson.M{"chat": input.ChatID}}},
+
+		bson.D{{Key: "$lookup", Value: bson.M{
+			"from":         "users",
+			"localField":   "sender",
+			"foreignField": "_id",
+			"as":           "senderDetail",
+		}}},
+		bson.D{{Key: "$unwind", Value: bson.M{"path": "$senderDetail", "preserveNullAndEmptyArrays": true}}}, // senderDetail'i obje haline getir
+		bson.D{{Key: "$sort", Value: bson.M{"createdAt": -1}}},                                               // Tarihe göre sıralama (-1: DESC, 1: ASC)
+
+		bson.D{{Key: "$skip", Value: skip}}, // Belirtilen sayıda belgeyi atla
+
+		bson.D{{Key: "$limit", Value: input.Limit}}, // Maksimum belge sayısını sınırla
+		bson.D{{Key: "$project", Value: bson.M{
+			"_id": 1,
+			// "senderDetail": 1,
+			// "sender":    "$senderDetail",
+
+			"sender": bson.M{
+				"_id":       "$senderDetail._id",       // Kullanıcının ID'si
+				"username":  "$senderDetail.username",  // Kullanıcının adı
+				"email":     "$senderDetail.email",     // Kullanıcının profil fotoğrafı
+				"firstName": "$senderDetail.firstName", // Kullanıcının profil fotoğrafı
+			}, "content": 1,
+			"createdAt": 1,
+			"updatedAt": 1,
+		}}},
+	}
+
+	cursor, err := messageCollection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var results []dto.GetChatMessagesObject
+	if err = cursor.All(ctx, &results); err != nil {
+		return nil, err
+	}
+
+	if len(results) == 0 {
+		return nil, fmt.Errorf("Messages not found")
+	}
+	
+
+	return &results, nil
+
 }

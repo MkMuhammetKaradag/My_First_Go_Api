@@ -261,3 +261,40 @@ func (ctrl *ChatController) LeaveChat(w http.ResponseWriter, r *http.Request) {
 		"chat":    chat,
 	})
 }
+
+func (ctrl *ChatController) GetChatMessages(w http.ResponseWriter, r *http.Request) {
+	userData, ok := middlewares.GetUserData(r)
+
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "Kullanıcı bilgisi bulunamadı")
+		return
+	}
+	userID, exists := userData["id"]
+	if !exists {
+		respondWithError(w, http.StatusInternalServerError, "Kullanıcı bilgisi bulunamadı")
+		return
+	}
+
+	var input dto.GetChatMessagesInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
+		return
+	}
+	input.SetDefaults()
+	if err := input.Validate(); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
+		return
+	}
+
+	messages, err := ctrl.chatService.GetChatMessages(userID, &input)
+	if err != nil {
+		respondWithError(w, http.StatusConflict, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	render.JSON(w, r, map[string]interface{}{
+		"message":   "messsages ok ",
+		"messsages": messages,
+	})
+}
