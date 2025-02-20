@@ -35,6 +35,8 @@ func main() {
 
 	port := 8080
 	fmt.Printf("Auth Service running on port %d\n", port)
+
+	// http.Handle("/metrics", promhttp.Handler())
 	r := routes.CreateServer(rabbitMQ, redisRepo, userRepo)
 	http.ListenAndServe(fmt.Sprintf(":%d", port), r)
 

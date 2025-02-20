@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 15s # Her 15 saniyede bir metrikleri topla
+
+scrape_configs:
+  - job_name: 'golang_service'
+    static_configs:
+      - targets: [
+            # 'host.docker.internal:8081',
+            'host.docker.internal:8080',
+            # 'host.docker.internal:8082',
+            'host.docker.internal:8083',
+          ]

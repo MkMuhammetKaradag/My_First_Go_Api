@@ -44,6 +44,9 @@ func main() {
 		return nil
 	})
 	port := 8083
+
+	// Servisi başlat
+	// http.ListenAndServe(":8083", nil)
 	fmt.Printf("chat Service running on port %d\n", port)
 	r := routes.CreateServer(rabbitMQ, chatRepo, redisRepo)
 	http.ListenAndServe(fmt.Sprintf(":%d", port), r)
