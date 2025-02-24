@@ -14,6 +14,11 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// @title           Chat Service API
+// @version         1.0
+// @description     This is an Chat service for managing chat.
+// @host            localhost:8083
+// @BasePath       /
 func main() {
 
 	database.ConnectMongoDB("mongodb://localhost:27017/chatDB")

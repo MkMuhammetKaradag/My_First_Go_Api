@@ -1,0 +1,72 @@
+basePath: /
+definitions:
+  controllers.ChatResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  controllers.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  models.Chat:
+    properties:
+      admins:
+        items:
+          type: string
+        type: array
+      chatName:
+        maxLength: 30
+        minLength: 3
+        type: string
+      createdAt:
+        type: string
+      id:
+        type: string
+      participants:
+        items:
+          type: string
+        maxItems: 20
+        minItems: 1
+        type: array
+      updatedAt:
+        type: string
+    required:
+    - chatName
+    - participants
+    type: object
+host: localhost:8083
+info:
+  contact: {}
+  description: This is an Chat service for managing chat.
+  title: Chat Service API
+  version: "1.0"
+paths:
+  /chat/create:
+    post:
+      consumes:
+      - application/json
+      description: Yeni bir  chat  oluşturur
+      parameters:
+      - description: Chat  oluşturma Modeli
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.Chat'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ChatResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controllers.ErrorResponse'
+      summary: Chat Oluştur
+      tags:
+      - Chat
+swagger: "2.0"

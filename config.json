@@ -1,0 +1,17 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Combined API",
+    "version": "1.0.0"
+  },
+  "apis": [
+    {
+      "url": "http://localhost:8080/auth/swagger/doc.json",
+      "paths": {}
+    },
+    {
+      "url": "http://localhost:8083/chat/swagger/doc.json",
+      "paths": {}
+    }
+  ]
+}

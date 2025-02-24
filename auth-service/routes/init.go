@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/controllers"
+
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/repository"
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/websocket"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/messaging"
@@ -13,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 var (
@@ -87,12 +89,15 @@ func CreateServer(rabbitMQ *messaging.RabbitMQ, sessionRepo *redisrepo.RedisRepo
 	r.Mount("/metrics", promhttp.Handler())
 	r.Route("/auth", func(r chi.Router) {
 		r.Use(middlewares.Logger)
+
 		r.Post("/signUp", authController.SignUp)
+
 		r.Post("/activationUser", authController.ActivationUser)
 		r.Post("/signIn", authController.SignIn)
 		r.Post("/forgotPassword", authController.ForgotPassword)
 		r.Post("/resetPassword", authController.ResetPassword)
-
+		// Swagger UI'yi "/swagger/" endpointine bağla
+		r.Get("/swagger/*", httpSwagger.WrapHandler)
 		r.Group(func(protectedRouter chi.Router) {
 			protectedRouter.Use(authMiddleware.Authenticate)
 

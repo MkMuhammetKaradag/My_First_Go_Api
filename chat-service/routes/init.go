@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 var (
@@ -93,7 +94,8 @@ func CreateServer(rabbitMQ *messaging.RabbitMQ, chatRepo *repository.ChatReposit
 			})
 
 		})
-
+		// Swagger UI'yi "/swagger/" endpointine bağla
+		r.Get("/swagger/*", httpSwagger.WrapHandler)
 		r.Group(func(protectedRouter chi.Router) {
 			protectedRouter.Use(authMiddleware.Authenticate)
 			protectedRouter.Post("/create", chatController.CreateChat)

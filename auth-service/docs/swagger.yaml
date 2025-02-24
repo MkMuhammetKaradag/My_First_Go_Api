@@ -1,0 +1,178 @@
+basePath: /
+definitions:
+  controllers.ActivationResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  controllers.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  controllers.SignUpResponse:
+    properties:
+      message:
+        type: string
+      userActivationToken:
+        type: string
+    type: object
+  controllers.SwagerSignin:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  dto.ActivationRequest:
+    properties:
+      activationCode:
+        type: string
+      activationToken:
+        type: string
+    type: object
+  models.User:
+    properties:
+      age:
+        maximum: 150
+        minimum: 13
+        type: integer
+      createdAt:
+        type: string
+      deletedAt:
+        type: string
+      email:
+        type: string
+      firstName:
+        maxLength: 50
+        minLength: 3
+        type: string
+      id:
+        type: string
+      isDeleted:
+        type: boolean
+      lastName:
+        maxLength: 50
+        minLength: 3
+        type: string
+      password:
+        minLength: 8
+        type: string
+      profilePhoto:
+        type: string
+      roles:
+        items:
+          $ref: '#/definitions/models.UserRole'
+        type: array
+      status:
+        type: string
+      updatedAt:
+        type: string
+      username:
+        maxLength: 30
+        minLength: 3
+        type: string
+    required:
+    - email
+    - firstName
+    - lastName
+    - password
+    - username
+    type: object
+  models.UserRole:
+    enum:
+    - admin
+    - test
+    - user
+    type: string
+    x-enum-varnames:
+    - ADMIN
+    - TEST
+    - USER
+host: localhost:8080
+info:
+  contact: {}
+  description: This is an authentication service for managing user authentication
+    and authorization.
+  title: Authentication Service API
+  version: "1.0"
+paths:
+  /auth/activationUser:
+    post:
+      consumes:
+      - application/json
+      description: kullanıcı etkinleştir
+      parameters:
+      - description: Kullanıcı Aktivasyon  Modeli
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ActivationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ActivationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controllers.ErrorResponse'
+      summary: Kullanıcı Aktivasyonu
+      tags:
+      - Auth
+  /auth/signIn:
+    post:
+      consumes:
+      - application/json
+      description: kullanıcı giriş
+      parameters:
+      - description: Kullanıcı giriş  Modeli
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.SwagerSignin'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ActivationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controllers.ErrorResponse'
+      summary: Kullanıcı Giriş
+      tags:
+      - Auth
+  /auth/signUp:
+    post:
+      consumes:
+      - application/json
+      description: Yeni bir kullanıcı oluşturur
+      parameters:
+      - description: Kullanıcı Kayıt Modeli
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.User'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.SignUpResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controllers.ErrorResponse'
+      summary: Kullanıcı Kaydı
+      tags:
+      - Auth
+swagger: "2.0"

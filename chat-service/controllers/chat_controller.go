@@ -5,6 +5,7 @@ import (
 
 	"net/http"
 
+	_ "github.com/MKMuhammetKaradag/go-microservice/chat-service/docs"
 	"github.com/MKMuhammetKaradag/go-microservice/chat-service/dto"
 	"github.com/MKMuhammetKaradag/go-microservice/chat-service/services"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/messaging"
@@ -35,6 +36,23 @@ func NewChatController(rabbitMQ *messaging.RabbitMQ, sessionRepo *redisrepo.Redi
 	}
 }
 
+type ChatResponse struct {
+	Message string `json:"message"`
+	chat    string `json:"chat"`
+}
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+// @Summary      Chat Oluştur
+// @Description  Yeni bir  chat  oluşturur
+// @Tags         Chat
+// @Accept       json
+// @Produce      json
+// @Param        request body models.Chat true "Chat  oluşturma Modeli"
+// @Success      200  {object}  ChatResponse
+// @Failure      400  {object}  ErrorResponse
+// @Router       /chat/create [post]
 func (ctrl *ChatController) CreateChat(w http.ResponseWriter, r *http.Request) {
 	var input models.Chat
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {

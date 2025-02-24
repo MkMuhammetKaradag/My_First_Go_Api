@@ -12,6 +12,11 @@ import (
 	"github.com/MKMuhammetKaradag/go-microservice/shared/redisrepo"
 )
 
+// @title           Authentication Service API
+// @version         1.0
+// @description     This is an authentication service for managing user authentication and authorization.
+// @host           localhost:8080
+// @BasePath       /
 func main() {
 	// Veritabanlarına bağlan
 	database.ConnectMongoDB("mongodb://localhost:27017/authDB")

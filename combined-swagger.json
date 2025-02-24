@@ -1,0 +1,301 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Combined API",
+    "version": "1.0.0"
+  },
+  "schemes": ["http"],
+  "paths": {
+    "/auth/activationUser": {
+      "post": {
+        "description": "kullanıcı etkinleştir",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "tags": ["Auth"],
+        "summary": "Kullanıcı Aktivasyonu",
+        "parameters": [
+          {
+            "description": "Kullanıcı Aktivasyon  Modeli",
+            "name": "request",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "activationCode": {
+                  "type": "string"
+                },
+                "activationToken": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/signIn": {
+      "post": {
+        "description": "kullanıcı giriş",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "tags": ["Auth"],
+        "summary": "Kullanıcı Giriş",
+        "parameters": [
+          {
+            "description": "Kullanıcı giriş  Modeli",
+            "name": "request",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "email": {
+                  "type": "string"
+                },
+                "password": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/signUp": {
+      "post": {
+        "description": "Yeni bir kullanıcı oluşturur",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "tags": ["Auth"],
+        "summary": "Kullanıcı Kaydı",
+        "parameters": [
+          {
+            "description": "Kullanıcı Kayıt Modeli",
+            "name": "request",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "email",
+                "firstName",
+                "lastName",
+                "password",
+                "username"
+              ],
+              "properties": {
+                "age": {
+                  "type": "integer",
+                  "maximum": 150,
+                  "minimum": 13
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "deletedAt": {
+                  "type": "string"
+                },
+                "email": {
+                  "type": "string"
+                },
+                "firstName": {
+                  "type": "string",
+                  "maxLength": 50,
+                  "minLength": 3
+                },
+                "id": {
+                  "type": "string"
+                },
+                "isDeleted": {
+                  "type": "boolean"
+                },
+                "lastName": {
+                  "type": "string",
+                  "maxLength": 50,
+                  "minLength": 3
+                },
+                "password": {
+                  "type": "string",
+                  "minLength": 8
+                },
+                "profilePhoto": {
+                  "type": "string"
+                },
+                "roles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["admin", "test", "user"],
+                    "x-enum-varnames": ["ADMIN", "TEST", "USER"]
+                  }
+                },
+                "status": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                },
+                "username": {
+                  "type": "string",
+                  "maxLength": 30,
+                  "minLength": 3
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "userActivationToken": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/create": {
+      "post": {
+        "description": "Yeni bir  chat  oluşturur",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "tags": ["Chat"],
+        "summary": "Chat Oluştur",
+        "parameters": [
+          {
+            "description": "Chat  oluşturma Modeli",
+            "name": "request",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["chatName", "participants"],
+              "properties": {
+                "admins": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "chatName": {
+                  "type": "string",
+                  "maxLength": 30,
+                  "minLength": 3
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "participants": {
+                  "type": "array",
+                  "maxItems": 20,
+                  "minItems": 1,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

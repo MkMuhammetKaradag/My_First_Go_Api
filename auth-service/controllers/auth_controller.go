@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	_ "github.com/MKMuhammetKaradag/go-microservice/auth-service/docs"
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/dto"
 	"github.com/MKMuhammetKaradag/go-microservice/auth-service/services"
 	"github.com/MKMuhammetKaradag/go-microservice/shared/messaging"
@@ -18,6 +19,29 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+type SwagerSignup struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+}
+
+type SwagerSignin struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+type SignUpResponse struct {
+	Message             string `json:"message"`
+	UserActivationToken string `json:"userActivationToken"`
+}
+type ActivationResponse struct {
+	Message string `json:"message"`
+	user    string `json:"user"`
+}
+
+// ErrorResponse Hata mesajlarını döndürmek için kullanılan yapı
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
 type AuthController struct {
 	authService *services.AuthService
 	rabbitMQ    *messaging.RabbitMQ
@@ -43,6 +67,15 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
+// @Summary      Kullanıcı Kaydı
+// @Description  Yeni bir kullanıcı oluşturur
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        request body models.User true "Kullanıcı Kayıt Modeli"
+// @Success      200  {object}  SignUpResponse
+// @Failure      400  {object}  ErrorResponse
+// @Router       /auth/signUp [post]
 func (ctrl *AuthController) SignUp(w http.ResponseWriter, r *http.Request) {
 	var user = models.NewUser()
 
@@ -86,6 +119,15 @@ func (ctrl *AuthController) SignUp(w http.ResponseWriter, r *http.Request) {
 
 }
 
+// @Summary      Kullanıcı Aktivasyonu
+// @Description   kullanıcı etkinleştir
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        request body dto.ActivationRequest true "Kullanıcı Aktivasyon  Modeli"
+// @Success      200  {object}  ActivationResponse
+// @Failure      400  {object}  ErrorResponse
+// @Router       /auth/activationUser [post]
 func (ctrl *AuthController) ActivationUser(w http.ResponseWriter, r *http.Request) {
 
 	var activationRequest dto.ActivationRequest
@@ -99,7 +141,7 @@ func (ctrl *AuthController) ActivationUser(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	userCreatedMessage := messaging.Message{
-		Type:      "user_created",
+		Type: "user_created",
 		// ToService: messaging.ServiceType("UserService"),
 		Data: map[string]interface{}{
 			"user_id":   activationUser.ID, // MongoDB'de oluşan ID
@@ -125,6 +167,15 @@ func (ctrl *AuthController) ActivationUser(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+// @Summary      Kullanıcı Giriş
+// @Description   kullanıcı giriş
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        request body SwagerSignin true "Kullanıcı giriş  Modeli"
+// @Success      200  {object}  ActivationResponse
+// @Failure      400  {object}  ErrorResponse
+// @Router       /auth/signIn [post]
 func (ctrl *AuthController) SignIn(w http.ResponseWriter, r *http.Request) {
 	var input models.User
 	fmt.Println("auth controller  yapısına geldi")
