@@ -21,10 +21,13 @@ type ChatService struct {
 }
 
 func NewChatService() *ChatService {
+	userCollection, _ := database.GetCollection("chatDB", "users")
+	chatCollection, _ := database.GetCollection("chatDB", "chats")
+	messageCollection, _ := database.GetCollection("chatDB", "messages")
 	return &ChatService{
-		userCollection:    database.GetCollection("chatDB", "users"),
-		chatCollection:    database.GetCollection("chatDB", "chats"),
-		messageCollection: database.GetCollection("chatDB", "messages"),
+		userCollection:    userCollection,
+		chatCollection:    chatCollection,
+		messageCollection: messageCollection,
 	}
 }
 
@@ -590,7 +593,6 @@ func (s *ChatService) GetChatMessages(userID string, input *dto.GetChatMessagesI
 	if len(results) == 0 {
 		return nil, fmt.Errorf("Messages not found")
 	}
-	
 
 	return &results, nil
 

@@ -2,7 +2,6 @@
 package controllers
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
@@ -32,9 +31,8 @@ func NewWebSocketController(hub *myWebsocket.Hub, userRepo *repository.UserRepos
 }
 
 func (wc *WebSocketController) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
-	
+
 	userData, ok := middlewares.GetUserData(r)
-	// fmt.Println("hello", userData)
 	if !ok {
 		respondWithError(w, http.StatusInternalServerError, "Kullanıcı bilgisi bulunamadı")
 		return
@@ -42,41 +40,53 @@ func (wc *WebSocketController) HandleWebSocket(w http.ResponseWriter, r *http.Re
 
 	userID, exists := userData["id"]
 	if !exists {
-		fmt.Println("id not found in userData")
-	} else {
-		fmt.Println("User ID:", userID)
+		respondWithError(w, http.StatusInternalServerError, "User ID bulunamadı")
+		return
 	}
-	fmt.Println("websovcket içi")
-	// userID := "asdsds"
+
 	// WebSocket bağlantısını yükselt
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("WebSocket upgrade error:", err)
+		respondWithError(w, http.StatusInternalServerError, "WebSocket bağlantısı kurulamıyor")
 		return
 	}
 
 	// Client'i hub'a kaydet
 	client := &myWebsocket.Client{UserID: userID, Conn: conn}
 	wc.Hub.Register <- client
-	defer func() {
-		wc.Hub.Unregister <- client
-	}()
 
 	// Kullanıcıyı online olarak işaretle
-	wc.UserRepo.UpdateUserStatus(userID, "online")
-	wc.RedisRepo.PublishStatus(userID, "online")
+	wc.setUserStatus(userID, "online")
+	defer wc.setUserStatus(userID, "offline")
 
-	// Bağlantı kapatıldığında offline yap
+	// Bağlantı kapatıldığında kullanıcıyı offline yap
 	defer func() {
-		wc.UserRepo.UpdateUserStatus(userID, "offline")
-		wc.RedisRepo.PublishStatus(userID, "offline")
+		wc.Hub.Unregister <- client
+		conn.Close()
 	}()
 
 	// Mesaj dinleme döngüsü
 	for {
 		_, _, err := conn.ReadMessage()
 		if err != nil {
+			log.Println("WebSocket message error:", err)
 			break
 		}
+	}
+}
+
+// Kullanıcı durumu güncelleme ve Redis ile senkronize etme
+func (wc *WebSocketController) setUserStatus(userID, status string) {
+	// Kullanıcı durumunu güncelle
+	err := wc.UserRepo.UpdateUserStatus(userID, status)
+	if err != nil {
+		log.Printf("Kullanıcı durumu güncellenemedi: %v", err)
+	}
+
+	// Redis'e durumu yayınla
+	err = wc.RedisRepo.PublishStatus(userID, status)
+	if err != nil {
+		log.Printf("Redis durumu güncellenemedi: %v", err)
 	}
 }

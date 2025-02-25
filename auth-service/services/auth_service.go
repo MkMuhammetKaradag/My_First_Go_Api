@@ -22,73 +22,74 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var r = rand.New(rand.NewSource(time.Now().UnixNano()))
+
 type AuthService struct {
 	collection              *mongo.Collection
 	passwordResetCollection *mongo.Collection
 }
 
 func NewAuthService() *AuthService {
+	passwordResetCollection, _ := database.GetCollection("authDB", "passwordresets")
 	return &AuthService{
 		collection:              database.MongoClient.Database("authDB").Collection("users"),
-		passwordResetCollection: database.GetCollection("authDB", "passwordresets"),
+		passwordResetCollection: passwordResetCollection,
 	}
 }
 
 func (s *AuthService) CheckExistingUser(email, username string) (bool, error) {
-	// filter := bson.M{"$or": []bson.M{
-	// 	{"email": email},
-	// 	{"username": username},
-	// }}
-	// count, err := s.collection.CountDocuments(context.Background(), filter)
-	// return count > 0, err
-	// Dinamik filtre oluştur
-	var filters []bson.M
 
-	if email != "" {
-		filters = append(filters, bson.M{"email": email})
-	}
-	if username != "" {
-		filters = append(filters, bson.M{"username": username})
-	}
-
-	// En az bir filtre varsa devam et
-	if len(filters) == 0 {
+	// Parametrelerin doğruluğunu kontrol et
+	if email == "" && username == "" {
 		return false, errors.New("en az bir parametre (email veya username) gereklidir")
 	}
 
-	// Filtreyi $or ile birleştir veya tek filtreyi doğrudan kullan
-	filter := bson.M{}
-	if len(filters) > 1 {
-		filter["$or"] = filters
+	// Filtreyi oluştur
+	var filter bson.M
+	if email != "" && username != "" {
+		// Her iki parametre varsa, $or operatörü ile birleştir
+		filter = bson.M{"$or": []bson.M{
+			{"email": email},
+			{"username": username},
+		}}
+	} else if email != "" {
+		// Yalnızca email varsa
+		filter = bson.M{"email": email}
 	} else {
-		filter = filters[0]
+		// Yalnızca username varsa
+		filter = bson.M{"username": username}
 	}
 
+	// Belirtilen filtreye göre belge sayısını kontrol et
 	count, err := s.collection.CountDocuments(context.Background(), filter)
-	return count > 0, err
+	if err != nil {
+		return false, fmt.Errorf("veritabanı hatası: %v", err)
+	}
+
+	// Eğer 1 veya daha fazla belge varsa, kullanıcı mevcut demektir
+	return count > 0, nil
 }
 
 func (s *AuthService) FindUser(email, userName string) (*models.User, error) {
-	var filters []bson.M
-
-	if email != "" {
-		filters = append(filters, bson.M{"email": email})
-	}
-	if userName != "" {
-		filters = append(filters, bson.M{"username": userName})
+	// Parametrelerin doğruluğunu kontrol et
+	if email == "" && userName == "" {
+		return nil, errors.New("en az bir parametre (email veya username) gereklidir")
 	}
 
-	// En az bir filtre varsa devam et
-	if len(filters) == 0 {
-		return nil, errors.New("en az bir parametre (email veya userName) gereklidir")
-	}
-
-	// Filtreyi $or ile birleştir veya tek filtreyi doğrudan kullan
-	filter := bson.M{}
-	if len(filters) > 1 {
-		filter["$or"] = filters
+	// Filtreyi oluştur
+	var filter bson.M
+	if email != "" && userName != "" {
+		// Her iki parametre varsa, $or operatörü ile birleştir
+		filter = bson.M{"$or": []bson.M{
+			{"email": email},
+			{"username": userName},
+		}}
+	} else if email != "" {
+		// Yalnızca email varsa
+		filter = bson.M{"email": email}
 	} else {
-		filter = filters[0]
+		// Yalnızca username varsa
+		filter = bson.M{"username": userName}
 	}
 
 	// Kullanıcıyı bul
@@ -96,15 +97,37 @@ func (s *AuthService) FindUser(email, userName string) (*models.User, error) {
 	err := s.collection.FindOne(context.Background(), filter).Decode(&user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, errors.New("Kulllanıcı bulunamadı") // Kullanıcı bulunamadı
+			return nil, errors.New("Kullanıcı bulunamadı") // Kullanıcı bulunamadı
 		}
-		return nil, err
+		return nil, fmt.Errorf("veritabanı hatası: %v", err)
 	}
 
 	return &user, nil
 
 }
 
+// Şifreyi hashleme fonksiyonu
+func (s *AuthService) hashPassword(password string) (string, error) {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hashedPassword), nil
+}
+
+// Kullanıcıyı veritabanına kaydetme fonksiyonu
+func (s *AuthService) saveUserToDB(ctx context.Context, user *models.User) error {
+	result, err := s.collection.InsertOne(ctx, user)
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return errors.New("bu email veya kullanıcı adı zaten kullanımda")
+		}
+		return err
+	}
+
+	user.ID = result.InsertedID.(primitive.ObjectID)
+	return nil
+}
 func (s *AuthService) Register(user *models.User) (*models.User, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -112,50 +135,39 @@ func (s *AuthService) Register(user *models.User) (*models.User, error) {
 	// Kullanıcı zaten var mı kontrol et
 	exists, err := s.CheckExistingUser(user.Email, user.Username)
 	if err != nil {
-		return nil, errors.New("veritabanı hatası")
+		return nil, fmt.Errorf("veritabanı hatası: %v", err)
 	}
 	if exists {
 		return nil, errors.New("bu email veya kullanıcı adı zaten kullanımda")
 	}
 
 	// Şifreyi hashle
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	hashedPassword, err := s.hashPassword(user.Password)
 	if err != nil {
-		return nil, errors.New("şifre işlenirken hata oluştu")
+		return nil, fmt.Errorf("şifre işlenirken hata oluştu: %v", err)
 	}
-	user.Password = string(hashedPassword)
-	now := time.Now()
-	user.CreatedAt = now
-	user.UpdatedAt = now
+	user.Password = hashedPassword
+
+	// Tarih ve saat bilgilerini ayarla
+	user.CreatedAt = time.Now()
+	user.UpdatedAt = user.CreatedAt
 
 	// Kullanıcıyı veritabanına ekle
-	result, err := s.collection.InsertOne(ctx, user)
+	err = s.saveUserToDB(ctx, user)
 	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return nil, errors.New("bu email veya kullanıcı adı zaten kullanımda")
-		}
-		return nil, errors.New("kullanıcı kaydedilemedi")
+		return nil, fmt.Errorf("kullanıcı kaydedilemedi: %v", err)
 	}
-	user.ID = result.InsertedID.(primitive.ObjectID)
 
-	// response := &dto.UserResponse{
-	// 	ID:        hex.EncodeToString(user.ID[:]),
-	// 	Username:  user.Username,
-	// 	Email:     user.Email,
-	// 	FirstName: user.FirstName,
-	// 	Age:       *user.Age,
-	// 	CreatedAt: user.CreatedAt,
-	// }
 	return user, nil
 }
 
 // const ACTIVATION_CODE_LENGTH = 4
 func GenerateActivationCode() string {
 
-	rand.Seed(time.Now().UnixNano())
-	num := rand.Intn(10000)
+	// 0 ile 9999 arasında bir sayı üret
+	num := r.Intn(10000)
 
-	// 4 haneye tamamlayarak string'e çevir
+	// 4 haneye tamamlayarak string'e çevir (örn: 0034, 0923, 0001)
 	return fmt.Sprintf("%04d", num)
 
 }
@@ -186,14 +198,19 @@ func (s *AuthService) ActivationUser(activationCode, activationToken string) (*m
 	jwtService := NewJwtHelperService(secretKey)
 	claims, err := jwtService.VerifyToken(activationToken)
 	if err != nil {
-		log.Fatalf("Error verifying token: %v", err)
+		return nil, fmt.Errorf("error verifying token: %w", err)
 	}
 
+	// Aktivasyon kodunun doğruluğunu kontrol et
 	if claims["activationCode"] != activationCode {
 		return nil, errors.New("activation code mismatch")
 	}
 
-	userData := claims["user"].(map[string]interface{})
+	// Kullanıcı verilerini al
+	userData, ok := claims["user"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("invalid user data in token")
+	}
 	user := &models.User{
 		Username:  userData["username"].(string),
 		Email:     userData["email"].(string),
@@ -202,7 +219,7 @@ func (s *AuthService) ActivationUser(activationCode, activationToken string) (*m
 		LastName:  userData["lastName"].(string),
 		Age:       ptrToInt(int(userData["age"].(float64))),
 	}
-
+	// Roller kontrolü ve eklenmesi
 	roles, ok := userData["roles"].([]interface{})
 	if !ok {
 		roles = []interface{}{models.USER}
@@ -212,14 +229,14 @@ func (s *AuthService) ActivationUser(activationCode, activationToken string) (*m
 	for _, role := range roles {
 		roleStr, ok := role.(string)
 		if ok {
-			fmt.Println("roleStr:", roleStr)
+
 			userRoles = append(userRoles, models.UserRole(roleStr))
 		}
 	}
 
 	user.Roles = userRoles
-	fmt.Println("rolstrt:", roles, "user roles", userRoles)
 
+	// Kullanıcıyı kaydet (aktif hale getirme)
 	return s.Register(user)
 }
 
@@ -230,13 +247,14 @@ func (s *AuthService) SignIn(input *models.User) (*dto.UserResponse, error) {
 
 	err := s.collection.FindOne(ctx, bson.M{"email": input.Email}).Decode(&user)
 	if err != nil {
-		return nil, errors.New("Geçersiz e-posta")
+		// E-posta ya da şifre hatalı olduğunda aynı hatayı döndür
+		return nil, errors.New("E-posta veya şifre hatalı")
 	}
 
 	// Şifreyi doğrula
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password))
 	if err != nil {
-		return nil, errors.New("yanlış şifre")
+		return nil, errors.New("E-posta veya şifre hatalı")
 	}
 
 	response := &dto.UserResponse{
@@ -269,7 +287,9 @@ func (s *AuthService) GenerateForgotPasswordLink(userId primitive.ObjectID) (str
 	// MongoDB'ye kaydet
 	_, err := s.passwordResetCollection.InsertOne(context.Background(), passwordReset)
 	if err != nil {
-		return "", err
+		// Hata günlüğü ile daha açıklayıcı bir hata mesajı
+		log.Printf("Password reset token creation failed for user %s: %v", userId.Hex(), err)
+		return "", fmt.Errorf("şifre sıfırlama bağlantısı oluşturulurken hata oluştu")
 	}
 
 	return resetToken, nil
@@ -277,16 +297,22 @@ func (s *AuthService) GenerateForgotPasswordLink(userId primitive.ObjectID) (str
 
 func (s *AuthService) ForgotPassword(email string) (*string, *string, error) {
 
+	// Kullanıcıyı bul
 	user, err := s.FindUser(email, "")
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Şifre sıfırlama token'ını oluştur
 	token, err := s.GenerateForgotPasswordLink(user.ID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	link := fmt.Sprintf("http//localhost:8000/resetPassword?:%s", string(token))
+	// Şifre sıfırlama linkini oluştur
+	link := fmt.Sprintf("http://localhost:8000/resetPassword?token=%s", token)
+
+	// Link ve kullanıcı adı döndür
 	return &link, &user.Username, nil
 
 }
@@ -301,7 +327,7 @@ func (s *AuthService) ResetPassword(input *dto.ResetPasswordDto) (*string, error
 		if err == mongo.ErrNoDocuments {
 			return nil, errors.New("token  Not Found")
 		}
-		return nil, err
+		return nil, fmt.Errorf("error finding token: %v", err)
 	}
 
 	var user models.User
@@ -310,21 +336,21 @@ func (s *AuthService) ResetPassword(input *dto.ResetPasswordDto) (*string, error
 		if err == mongo.ErrNoDocuments {
 			return nil, errors.New("User Not Found")
 		}
-		return nil, err
+		return nil, fmt.Errorf("error finding user: %v", err)
 	}
-
+	// Şifreyi hashle
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 
 	if err != nil {
 		return nil, errors.New("An error occurred while processing the password.")
 	}
-
+	// Kullanıcı şifresini güncelle
 	update := bson.M{"$set": bson.M{"password": string(hashedPassword)}}
 	_, err = s.collection.UpdateOne(context.Background(), bson.M{"_id": passwordReset.UserID}, update)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error updating password: %v", err)
 	}
-
+	// Şifre sıfırlama kaydını sil
 	_, err = s.passwordResetCollection.DeleteOne(context.Background(), bson.M{"_id": passwordReset.ID})
 	if err != nil {
 		return nil, err

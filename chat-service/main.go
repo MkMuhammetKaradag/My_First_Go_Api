@@ -25,7 +25,8 @@ func main() {
 
 	repository.InitChatDatabase()
 	database.ConnectRedis("localhost:6379", 0)
-	chatRepo := repository.NewChatRepository(database.GetCollection("chatDB", "chats"))
+	collection, _ := database.GetCollection("chatDB", "chats")
+	chatRepo := repository.NewChatRepository(collection)
 	// a, error1 := chatRepo.IsUserInChat("", "")
 	// fmt.Println(error1)
 	// fmt.Println(a)

@@ -38,6 +38,10 @@ type ActivationResponse struct {
 	user    string `json:"user"`
 }
 
+type LogoutResponse struct {
+	Message string `json:"message"`
+}
+
 // ErrorResponse Hata mesajlarını döndürmek için kullanılan yapı
 type ErrorResponse struct {
 	Error string `json:"error"`
@@ -67,6 +71,12 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(payload)
+}
+
 // @Summary      Kullanıcı Kaydı
 // @Description  Yeni bir kullanıcı oluşturur
 // @Tags         Auth
@@ -79,23 +89,27 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 func (ctrl *AuthController) SignUp(w http.ResponseWriter, r *http.Request) {
 	var user = models.NewUser()
 
+	// Kullanıcı verisini JSON'dan çözümle
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
+		respondWithError(w, http.StatusBadRequest, "Geçersiz veri formatı")
 		return
 	}
 
+	// Kullanıcı verisini doğrula
 	if err := validateUser(&user); err != nil {
 		respondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
+	// Kullanıcıyı kaydet ve aktivasyon bilgilerini al
 	activationCode, activationToken, err := ctrl.authService.SignUp(&user)
-
 	if err != nil {
 		respondWithError(w, http.StatusConflict, err.Error())
 		return
 	}
-	userActiveMessage := messaging.Message{
+
+	// Aktivasyon e-postası için mesaj oluştur
+	emailMessage := messaging.Message{
 		Type:      "active_user",
 		ToService: messaging.EmailService,
 		Data: map[string]interface{}{
@@ -106,17 +120,18 @@ func (ctrl *AuthController) SignUp(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	err = ctrl.rabbitMQ.PublishMessage(context.Background(), userActiveMessage)
-	if err != nil {
-		log.Printf("Kullanıcı oluşturma mesajı gönderilemedi: %v", err)
-
+	// RabbitMQ'ya aktivasyon mesajı gönder
+	if err := ctrl.rabbitMQ.PublishMessage(context.Background(), emailMessage); err != nil {
+		log.Printf("Kullanıcı aktivasyon mesajı gönderilemedi: %v", err)
+		respondWithError(w, http.StatusInternalServerError, "Aktivasyon e-postası gönderilemedi")
+		return
 	}
-	w.WriteHeader(http.StatusCreated)
-	render.JSON(w, r, map[string]interface{}{
-		"message":             "Kullanıcı başarıyla oluşturuldu-asa",
+
+	// Başarılı yanıtı dön
+	respondWithJSON(w, http.StatusCreated, map[string]interface{}{
+		"message":             "Kullanıcı başarıyla oluşturuldu",
 		"userActivationToken": activationToken,
 	})
-
 }
 
 // @Summary      Kullanıcı Aktivasyonu
@@ -129,41 +144,44 @@ func (ctrl *AuthController) SignUp(w http.ResponseWriter, r *http.Request) {
 // @Failure      400  {object}  ErrorResponse
 // @Router       /auth/activationUser [post]
 func (ctrl *AuthController) ActivationUser(w http.ResponseWriter, r *http.Request) {
-
 	var activationRequest dto.ActivationRequest
+
+	// Aktivasyon isteğini JSON'dan çözümle
 	if err := json.NewDecoder(r.Body).Decode(&activationRequest); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
+		respondWithError(w, http.StatusBadRequest, "Geçersiz veri formatı")
 		return
 	}
-	activationUser, err := ctrl.authService.ActivationUser(activationRequest.ActivationCode, activationRequest.ActivationToken)
+
+	// Aktivasyon işlemini gerçekleştir
+	activatedUser, err := ctrl.authService.ActivationUser(activationRequest.ActivationCode, activationRequest.ActivationToken)
 	if err != nil {
 		respondWithError(w, http.StatusConflict, err.Error())
 		return
 	}
+
+	// Kullanıcı oluşturulduğunda RabbitMQ'ya mesaj gönder
 	userCreatedMessage := messaging.Message{
-		Type: "user_created",
-		// ToService: messaging.ServiceType("UserService"),
+		Type:      "user_created",
+		ToService: messaging.UserService, // Eğer belirli bir servis varsa burada belirtin
 		Data: map[string]interface{}{
-			"user_id":   activationUser.ID, // MongoDB'de oluşan ID
-			"email":     activationUser.Email,
-			"firstName": activationUser.FirstName,
-			"age":       activationUser.Age,
-			"createdAt": activationUser.CreatedAt,
-			"username":  activationUser.Username,
-			// Diğer gerekli kullanıcı bilgileri
+			"user_id":   activatedUser.ID,
+			"email":     activatedUser.Email,
+			"firstName": activatedUser.FirstName,
+			"age":       activatedUser.Age,
+			"createdAt": activatedUser.CreatedAt,
+			"username":  activatedUser.Username,
 		},
 	}
 
-	err = ctrl.rabbitMQ.PublishMessage(context.Background(), userCreatedMessage)
-	if err != nil {
+	// Mesaj gönderme başarısız olursa hata loglanır ancak işlem devam eder
+	if err := ctrl.rabbitMQ.PublishMessage(context.Background(), userCreatedMessage); err != nil {
 		log.Printf("Kullanıcı oluşturma mesajı gönderilemedi: %v", err)
-		// İşleme devam et, kritik hata değil
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	render.JSON(w, r, map[string]interface{}{
-		"message": "Kullanıcı başarıyla oluşturuldu-asa",
-		"user":    activationUser,
+	// Başarılı yanıt dön
+	respondWithJSON(w, http.StatusCreated, map[string]interface{}{
+		"message": "Kullanıcı başarıyla oluşturuldu",
+		"user":    activatedUser,
 	})
 }
 
@@ -178,26 +196,31 @@ func (ctrl *AuthController) ActivationUser(w http.ResponseWriter, r *http.Reques
 // @Router       /auth/signIn [post]
 func (ctrl *AuthController) SignIn(w http.ResponseWriter, r *http.Request) {
 	var input models.User
-	fmt.Println("auth controller  yapısına geldi")
+	fmt.Println("auth controller yapısına geldi")
+
+	// Gelen isteği çözümle
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
+		respondWithError(w, http.StatusBadRequest, "Geçersiz veri formatı")
 		return
 	}
 
+	// Kullanıcıyı kimlik doğrulama servisine gönder
 	user, err := ctrl.authService.SignIn(&input)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	// Redis'e oturum kaydet
-	sessionKey := "session:" + user.ID
+	// Kullanıcı rollerini JSON formatına çevir
 	rolesJSON, err := json.Marshal(user.Roles)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, err.Error())
-		fmt.Println("Hata:", err)
+		respondWithError(w, http.StatusInternalServerError, "Rol bilgisi dönüştürülemedi")
+		log.Println("Rol JSON hatası:", err)
 		return
 	}
+
+	// Redis'te oturum oluştur
+	sessionKey := "session:" + user.ID
 	userData := map[string]string{
 		"id":       user.ID,
 		"email":    user.Email,
@@ -205,100 +228,119 @@ func (ctrl *AuthController) SignIn(w http.ResponseWriter, r *http.Request) {
 		"username": user.Username,
 	}
 
-	// userDataJson, err := json.Marshal(userData)
-	// if err != nil {
-	// 	respondWithError(w, http.StatusUnauthorized, err.Error())
-	// 	return
-	// }
-	// fmt.Println("userData", userData)
-	err = ctrl.sessionRepo.SetSession(sessionKey, userData, 24*time.Hour)
-
-	// database.RedisClient.Set(sessionKey, userDataJson, 24*time.Hour).Err()
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, err.Error())
+	if err := ctrl.sessionRepo.SetSession(sessionKey, userData, 24*time.Hour); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Oturum kaydedilemedi")
+		log.Println("Redis oturum hatası:", err)
 		return
-
 	}
 
-	cookie := &http.Cookie{
+	// Kullanıcı için çerez oluştur
+	http.SetCookie(w, &http.Cookie{
 		Name:     "session_id",
 		Value:    user.ID,
 		Path:     "/",
-		MaxAge:   60 * 60 * 24, // 30 dakika
+		MaxAge:   60 * 60 * 24, // 1 gün
 		HttpOnly: true,
-		Secure:   false, // HTTPS kullanıyorsanız true yapın
+		Secure:   false, // HTTPS kullanılıyorsa true yapılmalı
 		SameSite: http.SameSiteLaxMode,
-	}
-	http.SetCookie(w, cookie)
-	w.WriteHeader(http.StatusOK)
-	render.JSON(w, r, map[string]interface{}{
+	})
+
+	// Başarılı yanıt dön
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "Giriş başarılı",
 		"user":    user,
 	})
 }
 
+// @Summary      Kullanıcı Çıkışı
+// @Description   kullanıcı Çıkışı
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}   LogoutResponse
+// @Failure      400  {object}  ErrorResponse
+// @Router       /auth/logout [post]
 func (ctrl *AuthController) Logout(w http.ResponseWriter, r *http.Request) {
-
+	// Çerezden session_id al
 	cookieSessionId, err := r.Cookie("session_id")
-
 	if err != nil {
-
-		respondWithError(w, http.StatusInternalServerError, "Giriş yapılmamış")
-
+		respondWithError(w, http.StatusUnauthorized, "Giriş yapılmamış")
 		return
 	}
 
+	// Redis'ten oturumu sil
 	sessionKey := "session:" + cookieSessionId.Value
-	err = ctrl.sessionRepo.DeleteSession(sessionKey)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Oturum sonlandırılamadı")
-		return
+	if err := ctrl.sessionRepo.DeleteSession(sessionKey); err != nil {
+		log.Println("Redis oturum silme hatası:", err)
 	}
-	fmt.Println("ok")
-	cookie := &http.Cookie{
+
+	// Çerezi geçersiz hale getir
+	http.SetCookie(w, &http.Cookie{
 		Name:     "session_id",
 		Value:    "",
 		Path:     "/",
-		MaxAge:   -1,
+		MaxAge:   -1, // Tarayıcıdan hemen silinsin
 		HttpOnly: true,
-	}
-	http.SetCookie(w, cookie)
+		Secure:   false, // HTTPS kullanılıyorsa true yapılmalı
+		SameSite: http.SameSiteStrictMode,
+	})
 
-	w.WriteHeader(http.StatusOK)
-	render.JSON(w, r, map[string]string{
+	// Başarılı yanıt döndür
+	respondWithJSON(w, http.StatusOK, map[string]string{
 		"message": "Başarıyla çıkış yapıldı",
 	})
+
 }
 
+// @Summary      Protected   router
+// @Description  otum açmış kullanıcının bilgiyi doner
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}   ActivationResponse
+// @Failure      400  {object}  ErrorResponse
+// @Router       /auth/protected [post]
 func Protected(w http.ResponseWriter, r *http.Request) {
-
+	// Kullanıcı verisini al
 	userData, ok := middlewares.GetUserData(r)
 	if !ok {
-		respondWithError(w, http.StatusInternalServerError, "Kullanıcı bilgisi bulunamadı")
+		respondWithError(w, http.StatusUnauthorized, "Yetkisiz erişim")
 		return
 	}
 
-	fmt.Println(userData)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	// JSON yanıt döndür
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "Protected endpoint",
-		"user":    userData["username"],
+		"user":    userData,
 	})
 }
 
+// @Summary       şifremi unuttum
+// @Description   kullanıcı giriş şifresini unutulduğun email yollar
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        request body dto.ForgotPasswordDto true "Kullanıcı şifre unutum modeli  Modeli"
+// @Success      200  {object}  LogoutResponse
+// @Failure      400  {object}  ErrorResponse
+// @Router       /auth/forgotPassword [post]
 func (ctrl *AuthController) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var input dto.ForgotPasswordDto
+
+	// Gelen JSON'u çözümle
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
+		respondWithError(w, http.StatusBadRequest, "Geçersiz veri formatı")
 		return
 	}
 
+	// Şifre sıfırlama tokeni oluştur
 	token, userName, err := ctrl.authService.ForgotPassword(input.Email)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, err.Error())
+		respondWithError(w, http.StatusUnauthorized, "E-posta adresi kayıtlı değil")
 		return
 	}
+
+	// Şifre sıfırlama e-postası için mesaj hazırla
 	userActiveMessage := messaging.Message{
 		Type:      "forgot_password",
 		ToService: messaging.EmailService,
@@ -310,33 +352,45 @@ func (ctrl *AuthController) ForgotPassword(w http.ResponseWriter, r *http.Reques
 		},
 	}
 
-	err = ctrl.rabbitMQ.PublishMessage(context.Background(), userActiveMessage)
-	if err != nil {
-		log.Printf("Kullanıcı oluşturma mesajı gönderilemedi: %v", err)
-
+	// RabbitMQ'ya mesaj gönder
+	if err := ctrl.rabbitMQ.PublishMessage(context.Background(), userActiveMessage); err != nil {
+		log.Printf("Şifre sıfırlama e-postası gönderilemedi: %v", err)
 	}
-	w.WriteHeader(http.StatusOK)
-	render.JSON(w, r, map[string]interface{}{
-		"message": "Password reset token sent",
-		// "token":   token,
+
+	// Başarı yanıtı döndür
+	respondWithJSON(w, http.StatusOK, map[string]string{
+		"message": "Şifre sıfırlama talimatları e-posta adresinize gönderildi",
 	})
 }
 
+// @Summary       şifremi  değiştirme
+// @Description   kullanıcı giriş şifresini yenileme
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        request body dto.ResetPasswordDto true "Kullanıcı şifre unutum modeli  Modeli"
+// @Success      200  {object}  LogoutResponse
+// @Failure      400  {object}  ErrorResponse
+// @Router       /auth/resetPassword [post]
 func (ctrl *AuthController) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	var input dto.ResetPasswordDto
+
+	// Gelen JSON'u çözümle
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Geçersiz veri")
-		return
-	}
-	token, err := ctrl.authService.ResetPassword(&input)
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, err.Error())
+		respondWithError(w, http.StatusBadRequest, "Geçersiz veri formatı")
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	render.JSON(w, r, map[string]interface{}{
-		"message": token,
+	// Şifre sıfırlama işlemini gerçekleştir
+	message, err := ctrl.authService.ResetPassword(&input)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Geçersiz ya da süresi dolmuş token")
+		return
+	}
+
+	// Başarı yanıtı döndür
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"message": message,
 	})
 }
 

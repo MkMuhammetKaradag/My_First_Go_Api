@@ -53,7 +53,7 @@ func (h *Hub) ListenRedisStatus(redisRepo *redisrepo.RedisRepository) {
 	for {
 		msg, err := pubsub.ReceiveMessage()
 		if err != nil {
-			log.Println("Redis sub error:", err)
+			log.Println("listen redis status  Redis sub error:", err)
 			continue
 		}
 

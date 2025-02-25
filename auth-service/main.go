@@ -18,31 +18,88 @@ import (
 // @host           localhost:8080
 // @BasePath       /
 func main() {
-	// Veritabanlarına bağlan
-	database.ConnectMongoDB("mongodb://localhost:27017/authDB")
-	if err := repository.CreateUniqueIndexes("authDB", "users"); err != nil {
-		log.Fatal("Index oluşturulurken hata:", err)
+	// Servisi başlat
+	if err := startAuthService(); err != nil {
+		log.Fatal("Servis başlatılamadı:", err)
 	}
-	repository.InitAuthDatabase()
-	// database.ConnectRedis()
-	database.ConnectRedis("localhost:6379", 0)
-	userRepo := repository.NewUserRepository(database.GetCollection("authDB", "users"))
+}
 
-	config := messaging.NewDefaultConfig()
-	config.RetryTypes = []string{"user_created"}
-	redisRepo := redisrepo.NewRedisRepository(database.RedisClient) // Redis repository oluşturuldu
-	var err error
-	rabbitMQ, err := messaging.NewRabbitMQ(config, messaging.AuthService)
+// Auth servisini başlatan fonksiyon
+func startAuthService() error {
+	// Veritabanı bağlantılarını başlat
+	if err := initDatabases(); err != nil {
+		return fmt.Errorf("veritabanı hatası: %w", err)
+	}
+
+	// RabbitMQ bağlantısını oluştur
+	rabbitMQ, err := initRabbitMQ()
 	if err != nil {
-		log.Fatal("RabbitMQ bağlantı hatası:", err)
+		return fmt.Errorf("RabbitMQ hatası: %w", err)
 	}
 	defer rabbitMQ.Close()
 
+	// Sunucuyu başlat
+	return startServer(rabbitMQ)
+}
+
+// Veritabanı bağlantılarını başlatan fonksiyon
+func initDatabases() error {
+	// MongoDB bağlantısı
+	if err := database.ConnectMongoDB("mongodb://localhost:27017/authDB"); err != nil {
+		return fmt.Errorf("MongoDB bağlantı hatası: %w", err)
+	}
+
+	// Kullanıcı koleksiyonunda indeksleri oluştur
+	if err := repository.CreateUniqueIndexes("authDB", "users"); err != nil {
+		return fmt.Errorf("MongoDB indeks hatası: %w", err)
+	}
+
+	// Auth veritabanını başlat
+	repository.InitAuthDatabase()
+
+	// Redis bağlantısını kur
+	if err := database.ConnectRedis("localhost:6379", 0); err != nil {
+		return fmt.Errorf("Redis bağlantı hatası: %w", err)
+	}
+	if !database.IsRedisConnected() {
+		return fmt.Errorf("Redis bağlantısı aktif değil!")
+	}
+
+	// Uygulama kapanırken Redis bağlantısını kapat
+	// defer func() {
+	// 	if err := database.DisconnectRedis(); err != nil {
+	// 		log.Printf("Redis bağlantısı kapatılırken hata: %v", err)
+	// 	}
+	// }()
+	return nil
+}
+
+// RabbitMQ bağlantısını başlatan fonksiyon
+func initRabbitMQ() (*messaging.RabbitMQ, error) {
+	config := messaging.NewDefaultConfig()
+	config.RetryTypes = []string{"user_created"}
+
+	rabbitMQ, err := messaging.NewRabbitMQ(config, messaging.AuthService)
+	if err != nil {
+		log.Printf("RabbitMQ bağlantısı kurulamadı: %v", err)
+		return nil, err
+	}
+
+	return rabbitMQ, nil
+}
+
+// HTTP sunucusunu başlatan fonksiyon
+func startServer(rabbitMQ *messaging.RabbitMQ) error {
 	port := 8080
 	fmt.Printf("Auth Service running on port %d\n", port)
 
-	// http.Handle("/metrics", promhttp.Handler())
-	r := routes.CreateServer(rabbitMQ, redisRepo, userRepo)
-	http.ListenAndServe(fmt.Sprintf(":%d", port), r)
+	collection, _ := database.GetCollection("authDB", "users")
+	userRepo := repository.NewUserRepository(collection)
+	redisRepo := redisrepo.NewRedisRepository(database.RedisClient)
 
+	// Router oluştur
+	r := routes.CreateServer(rabbitMQ, redisRepo, userRepo)
+
+	// HTTP sunucusunu başlat
+	return http.ListenAndServe(fmt.Sprintf(":%d", port), r)
 }

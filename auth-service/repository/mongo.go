@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"time"
+
 	"github.com/MKMuhammetKaradag/go-microservice/shared/database"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -16,7 +17,7 @@ const authDB = "authDB"
 var MongoClient *mongo.Client
 
 func CreateUniqueIndexes(databaseName string, collectionName string) error {
-	collection := database.GetCollection(authDB, "users")
+	collection, _ := database.GetCollection(authDB, "users")
 
 	// Email için unique index
 	emailIndex := mongo.IndexModel{
@@ -40,7 +41,7 @@ func InitAuthDatabase() {
 	fmt.Println("Auth servisinin koleksiyonları oluşturuldu.")
 }
 func CreateUserCollectionWithSchema() {
-	db := database.GetDatabase(authDB)
+	db, _ := database.GetDatabase(authDB)
 
 	userSchema := bson.M{
 		"bsonType": "object",
@@ -86,7 +87,7 @@ func CreateUserCollectionWithSchema() {
 
 // PasswordReset koleksiyonu ve şeması
 func CreatePasswordResetCollectionWithSchema() {
-	db := database.GetDatabase(authDB)
+	db, _ := database.GetDatabase(authDB)
 
 	passwordResetSchema := bson.M{
 		"bsonType": "object",

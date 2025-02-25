@@ -10,6 +10,11 @@ definitions:
       error:
         type: string
     type: object
+  controllers.LogoutResponse:
+    properties:
+      message:
+        type: string
+    type: object
   controllers.SignUpResponse:
     properties:
       message:
@@ -29,6 +34,18 @@ definitions:
       activationCode:
         type: string
       activationToken:
+        type: string
+    type: object
+  dto.ForgotPasswordDto:
+    properties:
+      email:
+        type: string
+    type: object
+  dto.ResetPasswordDto:
+    properties:
+      password:
+        type: string
+      token:
         type: string
     type: object
   models.User:
@@ -121,6 +138,96 @@ paths:
           schema:
             $ref: '#/definitions/controllers.ErrorResponse'
       summary: Kullanıcı Aktivasyonu
+      tags:
+      - Auth
+  /auth/forgotPassword:
+    post:
+      consumes:
+      - application/json
+      description: kullanıcı giriş şifresini unutulduğun email yollar
+      parameters:
+      - description: Kullanıcı şifre unutum modeli  Modeli
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ForgotPasswordDto'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.LogoutResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controllers.ErrorResponse'
+      summary: şifremi unuttum
+      tags:
+      - Auth
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: kullanıcı Çıkışı
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.LogoutResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controllers.ErrorResponse'
+      summary: Kullanıcı Çıkışı
+      tags:
+      - Auth
+  /auth/protected:
+    post:
+      consumes:
+      - application/json
+      description: otum açmış kullanıcının bilgiyi doner
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ActivationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controllers.ErrorResponse'
+      summary: Protected   router
+      tags:
+      - Auth
+  /auth/resetPassword:
+    post:
+      consumes:
+      - application/json
+      description: kullanıcı giriş şifresini yenileme
+      parameters:
+      - description: Kullanıcı şifre unutum modeli  Modeli
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ResetPasswordDto'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.LogoutResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controllers.ErrorResponse'
+      summary: şifremi  değiştirme
       tags:
       - Auth
   /auth/signIn:

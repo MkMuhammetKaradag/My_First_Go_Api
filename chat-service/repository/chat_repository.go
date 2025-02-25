@@ -16,7 +16,8 @@ type ChatRepository struct {
 }
 
 func NewChatRepository(collection *mongo.Collection) *ChatRepository {
-	return &ChatRepository{collection: database.GetCollection("chatDB", "chats")}
+	dbcollection, _ := database.GetCollection("chatDB", "chats")
+	return &ChatRepository{collection: dbcollection}
 }
 func (r *ChatRepository) IsUserInChat(chatID, userID string) (bool, error) {
 
@@ -30,18 +31,13 @@ func (r *ChatRepository) IsUserInChat(chatID, userID string) (bool, error) {
 		return false, fmt.Errorf("geçersiz userID: %v", err)
 	}
 
-	
 	filter := bson.M{
 		"_id":          chatObjID,
 		"participants": userObjID,
 	}
 
-
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
-
 
 	count, err := r.collection.CountDocuments(ctx, filter)
 	if err != nil {

@@ -22,7 +22,7 @@ func InitChatDatabase() {
 }
 
 func CreateUniqueIndexes() {
-	db := database.GetDatabase(chatDB)
+	db, _ := database.GetDatabase(chatDB)
 	userCollection := db.Collection("users")
 
 	// Mevcut indeksleri al
@@ -83,7 +83,7 @@ func CreateUniqueIndexes() {
 }
 
 func CreateUserCollectionWithSchema() {
-	db := database.GetDatabase(chatDB)
+	db, _ := database.GetDatabase(chatDB)
 
 	// Önce koleksiyonun var olup olmadığını kontrol et
 	colNames, err := db.ListCollectionNames(
@@ -136,7 +136,7 @@ func CreateUserCollectionWithSchema() {
 	}
 }
 func CreateChatCollectionWithSchema() {
-	db := database.GetDatabase(chatDB)
+	db, _ := database.GetDatabase(chatDB)
 
 	// Önce koleksiyonun var olup olmadığını kontrol et
 	colNames, err := db.ListCollectionNames(
@@ -206,7 +206,7 @@ func CreateChatCollectionWithSchema() {
 }
 
 func CreateMessageCollectionWithSchema() {
-	db := database.GetDatabase(chatDB)
+	db, _ := database.GetDatabase(chatDB)
 
 	// Önce koleksiyonun var olup olmadığını kontrol et
 	colNames, err := db.ListCollectionNames(
